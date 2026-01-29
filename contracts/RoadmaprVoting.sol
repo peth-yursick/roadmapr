@@ -1,0 +1,532 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+/**
+ * @title RoadmaprVoting
+ * @notice Token escrow contract for Roadmapr voting system
+ *
+ * Flow:
+ * 1. Project owner registers project with token address, vote increment, and fee recipient
+ * 2. Users vote by locking tokens (amount = increment * vote count)
+ * 3. 1% fee is collected on each vote
+ * 4. When feature is shipped, project owner can claim all locked tokens
+ * 5. If feature is not shipped within unlock period, voters can withdraw
+ */
+contract RoadmaprVoting is ReentrancyGuard, Ownable {
+    using SafeERC20 for IERC20;
+
+    // ============================================
+    // Constants
+    // ============================================
+
+    uint256 public constant FEE_PERCENTAGE = 100; // 1% = 100 basis points
+    uint256 public constant FEE_DENOMINATOR = 10000;
+    uint256 public constant DEFAULT_UNLOCK_PERIOD = 7 days;
+
+    // ============================================
+    // Structs
+    // ============================================
+
+    struct Project {
+        address tokenAddress;
+        address owner;
+        address feeRecipient;
+        uint256 voteIncrement;      // Tokens per vote (e.g., 1M tokens = 1 vote)
+        uint256 unlockPeriod;       // Time before voters can withdraw if not shipped
+        uint256 totalFeesCollected;
+        bool exists;
+    }
+
+    struct Vote {
+        address voter;
+        uint256 tokensLocked;
+        uint256 lockedAt;
+        bool isUpvote;
+        bool withdrawn;
+        bool claimedByOwner;
+    }
+
+    struct Feature {
+        bytes32 projectId;
+        uint256 totalUpvoteTokens;
+        uint256 totalDownvoteTokens;
+        uint256 shippedAt;
+        bool isShipped;
+    }
+
+    // ============================================
+    // State
+    // ============================================
+
+    // projectId => Project
+    mapping(bytes32 => Project) public projects;
+
+    // featureId => Feature
+    mapping(bytes32 => Feature) public features;
+
+    // featureId => voter => Vote
+    mapping(bytes32 => mapping(address => Vote)) public votes;
+
+    // Accumulated fees per project token
+    mapping(bytes32 => uint256) public accumulatedFees;
+
+    // ============================================
+    // Events
+    // ============================================
+
+    event ProjectRegistered(
+        bytes32 indexed projectId,
+        address indexed tokenAddress,
+        address indexed owner,
+        uint256 voteIncrement
+    );
+
+    event ProjectUpdated(
+        bytes32 indexed projectId,
+        address feeRecipient,
+        uint256 voteIncrement
+    );
+
+    event VoteCast(
+        bytes32 indexed featureId,
+        bytes32 indexed projectId,
+        address indexed voter,
+        uint256 tokensLocked,
+        uint256 feePaid,
+        bool isUpvote
+    );
+
+    event VoteWithdrawn(
+        bytes32 indexed featureId,
+        address indexed voter,
+        uint256 tokensReturned
+    );
+
+    event FeatureShipped(
+        bytes32 indexed featureId,
+        bytes32 indexed projectId,
+        uint256 shippedAt
+    );
+
+    event TokensClaimed(
+        bytes32 indexed featureId,
+        bytes32 indexed projectId,
+        address indexed claimer,
+        uint256 amount
+    );
+
+    event FeesWithdrawn(
+        bytes32 indexed projectId,
+        address indexed recipient,
+        uint256 amount
+    );
+
+    // ============================================
+    // Constructor
+    // ============================================
+
+    constructor() Ownable(msg.sender) {}
+
+    // ============================================
+    // Project Management
+    // ============================================
+
+    /**
+     * @notice Register a new project for token voting
+     * @param projectId Unique identifier (UUID from database)
+     * @param tokenAddress ERC20 token used for voting
+     * @param voteIncrement Number of tokens per vote increment
+     * @param feeRecipient Address to receive 1% fees (can be same as owner)
+     */
+    function registerProject(
+        bytes32 projectId,
+        address tokenAddress,
+        uint256 voteIncrement,
+        address feeRecipient
+    ) external {
+        require(!projects[projectId].exists, "Project already exists");
+        require(tokenAddress != address(0), "Invalid token address");
+        require(voteIncrement > 0, "Vote increment must be > 0");
+        require(feeRecipient != address(0), "Invalid fee recipient");
+
+        projects[projectId] = Project({
+            tokenAddress: tokenAddress,
+            owner: msg.sender,
+            feeRecipient: feeRecipient,
+            voteIncrement: voteIncrement,
+            unlockPeriod: DEFAULT_UNLOCK_PERIOD,
+            totalFeesCollected: 0,
+            exists: true
+        });
+
+        emit ProjectRegistered(projectId, tokenAddress, msg.sender, voteIncrement);
+    }
+
+    /**
+     * @notice Update project settings (owner only)
+     */
+    function updateProject(
+        bytes32 projectId,
+        address feeRecipient,
+        uint256 voteIncrement,
+        uint256 unlockPeriod
+    ) external {
+        Project storage project = projects[projectId];
+        require(project.exists, "Project does not exist");
+        require(msg.sender == project.owner, "Not project owner");
+        require(voteIncrement > 0, "Vote increment must be > 0");
+        require(feeRecipient != address(0), "Invalid fee recipient");
+
+        project.feeRecipient = feeRecipient;
+        project.voteIncrement = voteIncrement;
+        project.unlockPeriod = unlockPeriod;
+
+        emit ProjectUpdated(projectId, feeRecipient, voteIncrement);
+    }
+
+    /**
+     * @notice Transfer project ownership
+     */
+    function transferProjectOwnership(bytes32 projectId, address newOwner) external {
+        Project storage project = projects[projectId];
+        require(project.exists, "Project does not exist");
+        require(msg.sender == project.owner, "Not project owner");
+        require(newOwner != address(0), "Invalid new owner");
+
+        project.owner = newOwner;
+    }
+
+    // ============================================
+    // Voting
+    // ============================================
+
+    /**
+     * @notice Cast a vote by locking tokens
+     * @param featureId Unique identifier for the feature (UUID from database)
+     * @param projectId Project this feature belongs to
+     * @param voteCount Number of vote increments (1 = voteIncrement tokens)
+     * @param isUpvote True for upvote, false for downvote
+     */
+    function vote(
+        bytes32 featureId,
+        bytes32 projectId,
+        uint256 voteCount,
+        bool isUpvote
+    ) external nonReentrant {
+        Project storage project = projects[projectId];
+        require(project.exists, "Project does not exist");
+        require(voteCount > 0, "Vote count must be > 0");
+
+        Feature storage feature = features[featureId];
+        require(!feature.isShipped, "Feature already shipped");
+
+        Vote storage existingVote = votes[featureId][msg.sender];
+        require(existingVote.tokensLocked == 0, "Already voted on this feature");
+
+        // Calculate amounts
+        uint256 tokensToLock = voteCount * project.voteIncrement;
+        uint256 fee = (tokensToLock * FEE_PERCENTAGE) / FEE_DENOMINATOR;
+        uint256 totalRequired = tokensToLock + fee;
+
+        // Transfer tokens from voter
+        IERC20 token = IERC20(project.tokenAddress);
+        token.safeTransferFrom(msg.sender, address(this), totalRequired);
+
+        // Initialize feature if first vote
+        if (feature.projectId == bytes32(0)) {
+            feature.projectId = projectId;
+        }
+
+        // Record vote
+        votes[featureId][msg.sender] = Vote({
+            voter: msg.sender,
+            tokensLocked: tokensToLock,
+            lockedAt: block.timestamp,
+            isUpvote: isUpvote,
+            withdrawn: false,
+            claimedByOwner: false
+        });
+
+        // Update feature totals
+        if (isUpvote) {
+            feature.totalUpvoteTokens += tokensToLock;
+        } else {
+            feature.totalDownvoteTokens += tokensToLock;
+        }
+
+        // Accumulate fees
+        accumulatedFees[projectId] += fee;
+        project.totalFeesCollected += fee;
+
+        emit VoteCast(featureId, projectId, msg.sender, tokensToLock, fee, isUpvote);
+    }
+
+    /**
+     * @notice Change vote direction (requires withdrawing and re-voting)
+     */
+    function changeVote(
+        bytes32 featureId,
+        bytes32 projectId,
+        uint256 voteCount,
+        bool isUpvote
+    ) external nonReentrant {
+        // First withdraw existing vote
+        _withdrawVote(featureId, msg.sender, true);
+
+        // Then cast new vote (will handle token transfer)
+        Project storage project = projects[projectId];
+        Feature storage feature = features[featureId];
+
+        uint256 tokensToLock = voteCount * project.voteIncrement;
+        uint256 fee = (tokensToLock * FEE_PERCENTAGE) / FEE_DENOMINATOR;
+        uint256 totalRequired = tokensToLock + fee;
+
+        IERC20 token = IERC20(project.tokenAddress);
+        token.safeTransferFrom(msg.sender, address(this), totalRequired);
+
+        votes[featureId][msg.sender] = Vote({
+            voter: msg.sender,
+            tokensLocked: tokensToLock,
+            lockedAt: block.timestamp,
+            isUpvote: isUpvote,
+            withdrawn: false,
+            claimedByOwner: false
+        });
+
+        if (isUpvote) {
+            feature.totalUpvoteTokens += tokensToLock;
+        } else {
+            feature.totalDownvoteTokens += tokensToLock;
+        }
+
+        accumulatedFees[projectId] += fee;
+        project.totalFeesCollected += fee;
+
+        emit VoteCast(featureId, projectId, msg.sender, tokensToLock, fee, isUpvote);
+    }
+
+    /**
+     * @notice Withdraw tokens if feature not shipped after unlock period
+     */
+    function withdrawVote(bytes32 featureId) external nonReentrant {
+        _withdrawVote(featureId, msg.sender, false);
+    }
+
+    function _withdrawVote(bytes32 featureId, address voter, bool isChangeVote) internal {
+        Vote storage voteData = votes[featureId][voter];
+        require(voteData.tokensLocked > 0, "No vote to withdraw");
+        require(!voteData.withdrawn, "Already withdrawn");
+        require(!voteData.claimedByOwner, "Claimed by project owner");
+
+        Feature storage feature = features[featureId];
+
+        // Can only withdraw if:
+        // 1. Feature is not shipped AND unlock period has passed, OR
+        // 2. This is a vote change operation
+        if (!isChangeVote) {
+            require(!feature.isShipped, "Feature shipped, tokens claimed by owner");
+            Project storage project = projects[feature.projectId];
+            require(
+                block.timestamp >= voteData.lockedAt + project.unlockPeriod,
+                "Unlock period not reached"
+            );
+        }
+
+        uint256 tokensToReturn = voteData.tokensLocked;
+        voteData.withdrawn = true;
+        voteData.tokensLocked = 0;
+
+        // Update feature totals
+        if (voteData.isUpvote) {
+            feature.totalUpvoteTokens -= tokensToReturn;
+        } else {
+            feature.totalDownvoteTokens -= tokensToReturn;
+        }
+
+        // Return tokens
+        Project storage project = projects[feature.projectId];
+        IERC20 token = IERC20(project.tokenAddress);
+        token.safeTransfer(voter, tokensToReturn);
+
+        emit VoteWithdrawn(featureId, voter, tokensToReturn);
+    }
+
+    // ============================================
+    // Feature Shipping & Token Claiming
+    // ============================================
+
+    /**
+     * @notice Mark a feature as shipped (project owner only)
+     * @dev This is called by the backend when status changes to 'shipped'
+     */
+    function markFeatureShipped(bytes32 featureId) external {
+        Feature storage feature = features[featureId];
+        require(feature.projectId != bytes32(0), "Feature does not exist");
+        require(!feature.isShipped, "Already shipped");
+
+        Project storage project = projects[feature.projectId];
+        require(msg.sender == project.owner, "Not project owner");
+
+        feature.isShipped = true;
+        feature.shippedAt = block.timestamp;
+
+        emit FeatureShipped(featureId, feature.projectId, block.timestamp);
+    }
+
+    /**
+     * @notice Claim locked tokens from a shipped feature (project owner only)
+     * @param featureId Feature to claim tokens from
+     * @param voters Array of voter addresses to claim from
+     */
+    function claimTokens(
+        bytes32 featureId,
+        address[] calldata voters
+    ) external nonReentrant {
+        Feature storage feature = features[featureId];
+        require(feature.isShipped, "Feature not shipped");
+
+        Project storage project = projects[feature.projectId];
+        require(msg.sender == project.owner, "Not project owner");
+
+        uint256 totalToClaim = 0;
+        IERC20 token = IERC20(project.tokenAddress);
+
+        for (uint256 i = 0; i < voters.length; i++) {
+            Vote storage voteData = votes[featureId][voters[i]];
+
+            if (voteData.tokensLocked > 0 && !voteData.withdrawn && !voteData.claimedByOwner) {
+                totalToClaim += voteData.tokensLocked;
+                voteData.claimedByOwner = true;
+            }
+        }
+
+        require(totalToClaim > 0, "Nothing to claim");
+
+        // Transfer to project owner
+        token.safeTransfer(msg.sender, totalToClaim);
+
+        emit TokensClaimed(featureId, feature.projectId, msg.sender, totalToClaim);
+    }
+
+    /**
+     * @notice Batch claim from multiple features
+     */
+    function batchClaimTokens(
+        bytes32[] calldata featureIds,
+        address[][] calldata votersPerFeature
+    ) external nonReentrant {
+        require(featureIds.length == votersPerFeature.length, "Array length mismatch");
+
+        for (uint256 i = 0; i < featureIds.length; i++) {
+            Feature storage feature = features[featureIds[i]];
+            if (!feature.isShipped) continue;
+
+            Project storage project = projects[feature.projectId];
+            if (msg.sender != project.owner) continue;
+
+            uint256 totalToClaim = 0;
+            IERC20 token = IERC20(project.tokenAddress);
+
+            for (uint256 j = 0; j < votersPerFeature[i].length; j++) {
+                Vote storage voteData = votes[featureIds[i]][votersPerFeature[i][j]];
+
+                if (voteData.tokensLocked > 0 && !voteData.withdrawn && !voteData.claimedByOwner) {
+                    totalToClaim += voteData.tokensLocked;
+                    voteData.claimedByOwner = true;
+                }
+            }
+
+            if (totalToClaim > 0) {
+                token.safeTransfer(msg.sender, totalToClaim);
+                emit TokensClaimed(featureIds[i], feature.projectId, msg.sender, totalToClaim);
+            }
+        }
+    }
+
+    // ============================================
+    // Fee Withdrawal
+    // ============================================
+
+    /**
+     * @notice Withdraw accumulated fees (fee recipient only)
+     */
+    function withdrawFees(bytes32 projectId) external nonReentrant {
+        Project storage project = projects[projectId];
+        require(project.exists, "Project does not exist");
+        require(
+            msg.sender == project.feeRecipient || msg.sender == project.owner,
+            "Not fee recipient or owner"
+        );
+
+        uint256 fees = accumulatedFees[projectId];
+        require(fees > 0, "No fees to withdraw");
+
+        accumulatedFees[projectId] = 0;
+
+        IERC20 token = IERC20(project.tokenAddress);
+        token.safeTransfer(project.feeRecipient, fees);
+
+        emit FeesWithdrawn(projectId, project.feeRecipient, fees);
+    }
+
+    // ============================================
+    // View Functions
+    // ============================================
+
+    function getProject(bytes32 projectId) external view returns (Project memory) {
+        return projects[projectId];
+    }
+
+    function getFeature(bytes32 featureId) external view returns (Feature memory) {
+        return features[featureId];
+    }
+
+    function getVote(bytes32 featureId, address voter) external view returns (Vote memory) {
+        return votes[featureId][voter];
+    }
+
+    function getFeatureVoteTotals(bytes32 featureId) external view returns (
+        uint256 upvoteTokens,
+        uint256 downvoteTokens,
+        int256 netTokens
+    ) {
+        Feature storage feature = features[featureId];
+        upvoteTokens = feature.totalUpvoteTokens;
+        downvoteTokens = feature.totalDownvoteTokens;
+        netTokens = int256(upvoteTokens) - int256(downvoteTokens);
+    }
+
+    function canWithdraw(bytes32 featureId, address voter) external view returns (bool) {
+        Vote storage voteData = votes[featureId][voter];
+        if (voteData.tokensLocked == 0 || voteData.withdrawn || voteData.claimedByOwner) {
+            return false;
+        }
+
+        Feature storage feature = features[featureId];
+        if (feature.isShipped) {
+            return false;
+        }
+
+        Project storage project = projects[feature.projectId];
+        return block.timestamp >= voteData.lockedAt + project.unlockPeriod;
+    }
+
+    function getClaimableAmount(bytes32 featureId, address[] calldata voters) external view returns (uint256) {
+        Feature storage feature = features[featureId];
+        if (!feature.isShipped) return 0;
+
+        uint256 total = 0;
+        for (uint256 i = 0; i < voters.length; i++) {
+            Vote storage voteData = votes[featureId][voters[i]];
+            if (voteData.tokensLocked > 0 && !voteData.withdrawn && !voteData.claimedByOwner) {
+                total += voteData.tokensLocked;
+            }
+        }
+        return total;
+    }
+}

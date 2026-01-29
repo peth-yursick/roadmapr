@@ -1,0 +1,23 @@
+{
+  "accountAssociation": {
+    "header": "eyJmaWQiOjkxNDAsInR5cGUiOiJhdXRoIiwia2V5IjoiMHgzMWIwYmNCMDJFZUNiN2U1RUM5QmZjN2VBZEE3Zjk5ZkQ4ODUyQjY5In0",
+    "payload": "eyJkb21haW4iOiJyb2FkbWFwci10ZW4udmVyY2VsLmFwcCJ9",
+    "signature": "NMKimuMtkifcOK+Vkp2PHxGG85KNyDkG1N9OywE/dw8KbZIN0jM1aI1CvgdjB/R2849yd68sQzb9AjrLUFUCchw="
+  },
+  "frame": {
+    "version": "1",
+    "name": "Roadmapr",
+    "iconUrl": "https://roadmapr-ten.vercel.app/icon.png",
+    "homeUrl": "https://roadmapr-ten.vercel.app",
+    "splashImageUrl": "https://roadmapr-ten.vercel.app/splash.png",
+    "splashBackgroundColor": "#101010",
+    "subtitle": "Community-weighted roadmap",
+    "description": "Submit features, vote with your reputation. The community decides what gets built.",
+    "primaryCategory": "developer-tools",
+    "tags": ["roadmap", "farcaster", "voting", "community"],
+    "heroImageUrl": "https://roadmapr-ten.vercel.app/hero.png",
+    "tagline": "Vote on what gets built next",
+    "ogTitle": "Roadmapr - Community Roadmap",
+    "ogDescription": "Submit and vote on features for Farcaster Protocol"
+  }
+}
