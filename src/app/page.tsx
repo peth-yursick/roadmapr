@@ -4,6 +4,9 @@ import { ProjectList } from "@/components/project-list";
 // Force rebuild - fix Vercel cache
 export const dynamic = 'force-dynamic';
 
+// Explicitly opt out of static optimization
+export const fetch = 'force-no-store';
+
 export default function Home() {
   return (
     <div className="min-h-screen">

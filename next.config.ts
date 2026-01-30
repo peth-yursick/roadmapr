@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Disable prerendering to prevent stale cache on Vercel
+  output: 'standalone',
+  experimental: {
+    forceSwcTransforms: true,
+  },
 };
 
 export default nextConfig;
