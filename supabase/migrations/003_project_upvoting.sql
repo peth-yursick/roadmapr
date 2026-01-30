@@ -27,8 +27,8 @@ ALTER TABLE project_votes ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Public read project votes" ON project_votes FOR SELECT USING (true);
 CREATE POLICY "Service insert project votes" ON project_votes FOR INSERT WITH CHECK (true);
-CREATE POLICY "Service update project votes" ON project_votes FOR UPDATE WITH CHECK (true);
-CREATE POLICY "Service delete project votes" ON project_votes FOR DELETE WITH CHECK (true);
+CREATE POLICY "Service update project votes" ON project_votes FOR UPDATE USING (true);
+CREATE POLICY "Service delete project votes" ON project_votes FOR DELETE USING (true);
 
 -- Function to update project vote count
 CREATE OR REPLACE FUNCTION update_project_vote_count() RETURNS TRIGGER AS $$
