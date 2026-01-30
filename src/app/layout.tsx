@@ -17,6 +17,10 @@ export const viewport: Viewport = {
   userScalable: false,
 };
 
+// Force dynamic rendering - disable all caching
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export const metadata: Metadata = {
   title: "Roadmapr - Community-Weighted Roadmap",
   description: "Submit features, vote with your reputation. The community decides what gets built.",

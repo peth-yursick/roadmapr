@@ -1,11 +1,10 @@
 import { Header } from "@/components/header";
 import { ProjectList } from "@/components/project-list";
 
-// Force rebuild - fix Vercel cache
+// Force dynamic rendering - disable all caching
 export const dynamic = 'force-dynamic';
-
-// Explicitly opt out of static optimization
-export const fetch = 'force-no-store';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 
 export default function Home() {
   return (
