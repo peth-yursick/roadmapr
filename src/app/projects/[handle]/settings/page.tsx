@@ -10,12 +10,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import type { Project, ProjectAdmin, NeynarUser } from "@/lib/types";
+import {
+  withdrawPlatformFeesWithWallet,
+  setPlatformFeeRecipientWithWallet,
+  getPlatformFeeRecipient,
+  getPlatformFeesOnChain,
+} from "@/lib/contract-client";
 
 export default function ProjectSettingsPage() {
   const params = useParams();
   const router = useRouter();
   const handle = params.handle as string;
-  const { user } = useAuth();
+  const { user, walletProvider } = useAuth();
 
   const [project, setProject] = useState<Project | null>(null);
   const [admins, setAdmins] = useState<(ProjectAdmin & { user?: NeynarUser })[]>([]);
@@ -28,10 +34,15 @@ export default function ProjectSettingsPage() {
   const [bio, setBio] = useState("");
   const [externalLink, setExternalLink] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
-  const [feeRecipient, setFeeRecipient] = useState("");
   const [voteIncrement, setVoteIncrement] = useState("");
   const [voteIncrementUsd, setVoteIncrementUsd] = useState("");
   const [newAdminFid, setNewAdminFid] = useState("");
+
+  // Platform fee state
+  const [platformFeeRecipient, setPlatformFeeRecipient] = useState<string>("");
+  const [newFeeRecipient, setNewFeeRecipient] = useState("");
+  const [isUpdatingFeeRecipient, setIsUpdatingFeeRecipient] = useState(false);
+  const [isWithdrawingFees, setIsWithdrawingFees] = useState(false);
 
   // Fetch project data
   useEffect(() => {
@@ -62,7 +73,6 @@ export default function ProjectSettingsPage() {
         setBio(data.project.bio || "");
         setExternalLink(data.project.external_link || "");
         setWebsiteUrl(data.project.website_url || "");
-        setFeeRecipient(data.project.fee_recipient_address || "");
         setVoteIncrement(data.project.vote_increment?.toString() || "1");
         setVoteIncrementUsd(data.project.vote_increment_usd?.toString() || "");
       } catch (err) {
@@ -74,6 +84,19 @@ export default function ProjectSettingsPage() {
     }
     fetchProject();
   }, [handle, router]);
+
+  // Fetch platform fee recipient on mount
+  useEffect(() => {
+    async function fetchFeeRecipient() {
+      try {
+        const recipient = await getPlatformFeeRecipient();
+        setPlatformFeeRecipient(recipient);
+      } catch (err) {
+        console.error("Failed to fetch fee recipient:", err);
+      }
+    }
+    fetchFeeRecipient();
+  }, []);
 
   async function handleSave() {
     if (!project) return;
@@ -87,7 +110,6 @@ export default function ProjectSettingsPage() {
           bio,
           external_link: externalLink || null,
           website_url: websiteUrl || null,
-          fee_recipient_address: feeRecipient || null,
           vote_increment: voteIncrement ? parseFloat(voteIncrement) : 1,
           vote_increment_usd: voteIncrementUsd ? parseFloat(voteIncrementUsd) : null,
         }),
@@ -148,6 +170,56 @@ export default function ProjectSettingsPage() {
     } catch (err) {
       console.error("Failed to remove admin:", err);
       toast.error(err instanceof Error ? err.message : "Failed to remove admin");
+    }
+  }
+
+  // Withdraw platform fees using connected wallet
+  async function handleWithdrawFees() {
+    if (!project || !walletProvider) {
+      toast.error("Wallet not connected. Please use Farcaster miniapp.");
+      return;
+    }
+
+    setIsWithdrawingFees(true);
+
+    try {
+      const txHash = await withdrawPlatformFeesWithWallet(project.id, walletProvider);
+      toast.success(`Platform fees withdrawn! TX: ${txHash}`);
+    } catch (err) {
+      console.error("Failed to withdraw fees:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to withdraw fees");
+    } finally {
+      setIsWithdrawingFees(false);
+    }
+  }
+
+  // Update platform fee recipient using connected wallet
+  async function handleUpdateFeeRecipient() {
+    if (!newFeeRecipient || !walletProvider) {
+      toast.error("Wallet not connected or invalid address");
+      return;
+    }
+
+    if (!/^0x[a-fA-F0-9]{40}$/.test(newFeeRecipient)) {
+      toast.error("Invalid Ethereum address");
+      return;
+    }
+
+    setIsUpdatingFeeRecipient(true);
+
+    try {
+      const txHash = await setPlatformFeeRecipientWithWallet(
+        newFeeRecipient as `0x${string}`,
+        walletProvider
+      );
+      setPlatformFeeRecipient(newFeeRecipient);
+      setNewFeeRecipient("");
+      toast.success(`Platform fee recipient updated! TX: ${txHash}`);
+    } catch (err) {
+      console.error("Failed to update fee recipient:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to update fee recipient");
+    } finally {
+      setIsUpdatingFeeRecipient(false);
     }
   }
 
@@ -241,23 +313,6 @@ export default function ProjectSettingsPage() {
           <section className="space-y-4">
             <h2 className="text-lg font-semibold">Token Voting Settings</h2>
 
-            <div>
-              <label className="block text-sm font-medium mb-1.5">
-                Fee Recipient Address
-              </label>
-              <Input
-                type="text"
-                value={feeRecipient}
-                onChange={(e) => setFeeRecipient(e.target.value)}
-                placeholder="0x..."
-                className="font-mono text-sm"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Where 1% voting fees will be sent. Leave empty to use project
-                creator&apos;s address.
-              </p>
-            </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1.5">
@@ -298,10 +353,67 @@ export default function ProjectSettingsPage() {
                 <strong>Confirmation:</strong> Each vote costs{" "}
                 {parseFloat(voteIncrement).toLocaleString()} tokens (~$
                 {parseFloat(voteIncrementUsd).toFixed(4)} USD)
+                {" • "}1% platform fee included
               </div>
             )}
           </section>
         )}
+
+        {/* Platform Fees Section */}
+        <section className="space-y-4">
+          <h2 className="text-lg font-semibold">Platform Fees</h2>
+          <p className="text-sm text-muted-foreground">
+            1% of all feature votes goes to the platform. Platform fee recipient can withdraw accumulated fees.
+          </p>
+
+          {/* Current fee recipient */}
+          {platformFeeRecipient && (
+            <div className="p-3 bg-muted/50 rounded-lg text-sm">
+              <strong>Current Fee Recipient:</strong>{" "}
+              <code className="text-xs">{platformFeeRecipient.slice(0, 8)}...{platformFeeRecipient.slice(-6)}</code>
+            </div>
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleWithdrawFees}
+            disabled={!walletProvider || isWithdrawingFees}
+          >
+            {isWithdrawingFees ? "Withdrawing..." : "Withdraw Platform Fees"}
+          </Button>
+          <p className="text-xs text-muted-foreground mt-1">
+            {!walletProvider
+              ? "Wallet not connected. Open in Farcaster miniapp to use wallet features."
+              : "This calls the smart contract to transfer accumulated 1% fees to the platform fee recipient."}
+          </p>
+
+          {/* Update fee recipient (contract owner only) */}
+          <div className="pt-4 border-t space-y-3">
+            <label className="block text-sm font-medium">
+              Update Platform Fee Recipient
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Only contract owner can update this. Set to your wallet address to withdraw fees.
+            </p>
+            <div className="flex gap-2">
+              <Input
+                type="text"
+                value={newFeeRecipient}
+                onChange={(e) => setNewFeeRecipient(e.target.value)}
+                placeholder="0x..."
+                className="flex-1 font-mono text-sm"
+              />
+              <Button
+                onClick={handleUpdateFeeRecipient}
+                disabled={!newFeeRecipient || !walletProvider || isUpdatingFeeRecipient}
+                size="sm"
+              >
+                {isUpdatingFeeRecipient ? "Updating..." : "Update"}
+              </Button>
+            </div>
+          </div>
+        </section>
 
         {/* Save Button */}
         <Button onClick={handleSave} disabled={isSaving}>

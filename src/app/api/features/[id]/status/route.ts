@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-
-const PROJECT_ID = "00000000-0000-0000-0000-000000000001";
+import { markFeatureShippedOnChain } from "@/lib/contract";
 
 export async function PATCH(
   request: NextRequest,
@@ -29,11 +28,22 @@ export async function PATCH(
 
     const supabase = await createClient();
 
-    // Check if user is authorized marker
+    // Get feature to check project_id
+    const { data: feature } = await supabase
+      .from("features")
+      .select("project_id")
+      .eq("id", id)
+      .single();
+
+    if (!feature) {
+      return NextResponse.json({ error: "Feature not found" }, { status: 404 });
+    }
+
+    // Check if user is authorized marker for this project
     const { data: marker } = await supabase
-      .from("authorized_markers")
-      .select("id")
-      .eq("project_id", PROJECT_ID)
+      .from("project_admins")
+      .select("id, role")
+      .eq("project_id", feature.project_id)
       .eq("fid", marker_fid)
       .single();
 
@@ -44,6 +54,7 @@ export async function PATCH(
       );
     }
 
+    // Update feature status
     const { data, error } = await supabase
       .from("features")
       .update({ status, updated_at: new Date().toISOString() })
@@ -55,8 +66,20 @@ export async function PATCH(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // If marking as shipped, also update on-chain (if project uses token voting)
+    if (status === "shipped") {
+      try {
+        const txHash = await markFeatureShippedOnChain(id);
+        console.log(`Feature ${id} marked as shipped on-chain: ${txHash}`);
+      } catch (contractError) {
+        console.error("Failed to mark shipped on-chain:", contractError);
+        // Don't fail the request if contract call fails - log it for manual retry
+      }
+    }
+
     return NextResponse.json({ feature: data });
-  } catch {
+  } catch (error) {
+    console.error("Status update error:", error);
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 }

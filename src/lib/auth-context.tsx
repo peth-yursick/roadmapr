@@ -14,24 +14,28 @@ interface User {
   username: string;
   displayName: string;
   pfpUrl: string;
+  custodyAddress?: string;
 }
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthorizedMarker: boolean;
+  walletProvider: any; // Wallet provider from Farcaster SDK
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   isLoading: true,
   isAuthorizedMarker: false,
+  walletProvider: null,
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthorizedMarker, setIsAuthorizedMarker] = useState(false);
+  const [walletProvider, setWalletProvider] = useState<any>(null);
 
   useEffect(() => {
     async function init() {
@@ -50,6 +54,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           const markerFids = process.env.NEXT_PUBLIC_AUTHORIZED_MARKER_FIDS?.split(",").map(Number) || [];
           setIsAuthorizedMarker(markerFids.includes(userData.fid));
+
+          // Get wallet provider
+          try {
+            const provider = await sdk.wallet.getEthereumProvider();
+            setWalletProvider(provider);
+          } catch (walletError) {
+            console.error("Failed to get wallet provider:", walletError);
+          }
 
           sdk.actions.ready();
           setIsLoading(false);
@@ -77,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isAuthorizedMarker }}>
+    <AuthContext.Provider value={{ user, isLoading, isAuthorizedMarker, walletProvider }}>
       {children}
     </AuthContext.Provider>
   );

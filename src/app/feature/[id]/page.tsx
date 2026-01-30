@@ -28,6 +28,7 @@ export default function FeatureDetailPage({
   const [feature, setFeature] = useState<FeatureDetailData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [isClaiming, setIsClaiming] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -79,6 +80,35 @@ export default function FeatureDetailPage({
       toast.error("Failed to update status");
     } finally {
       setIsUpdatingStatus(false);
+    }
+  }
+
+  async function handleClaimTokens() {
+    if (!user || !feature) return;
+
+    setIsClaiming(true);
+    try {
+      const res = await fetch(`/api/features/${id}/claim`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          claimer_fid: user.fid,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error || "Failed to claim tokens");
+        return;
+      }
+
+      toast.success(`Claimed ${data.amount_claimed} tokens!`);
+      setFeature((prev) => prev ? { ...prev, tokens_claimable: 0 } : null);
+    } catch {
+      toast.error("Failed to claim tokens");
+    } finally {
+      setIsClaiming(false);
     }
   }
 
@@ -213,9 +243,21 @@ export default function FeatureDetailPage({
           {/* Token claimable info for shipped features */}
           {feature.status === "shipped" && feature.tokens_claimable > 0 && (
             <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg mb-4">
-              <p className="text-sm text-green-600 dark:text-green-400">
-                <strong>{formatWeight(feature.tokens_claimable)}</strong> tokens available to claim
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-green-600 dark:text-green-400">
+                  <strong>{formatWeight(feature.tokens_claimable)}</strong> tokens available to claim
+                </p>
+                {isAuthorizedMarker && (
+                  <Button
+                    size="sm"
+                    onClick={handleClaimTokens}
+                    disabled={isClaiming}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    {isClaiming ? "Claiming..." : "Claim Tokens"}
+                  </Button>
+                )}
+              </div>
             </div>
           )}
 

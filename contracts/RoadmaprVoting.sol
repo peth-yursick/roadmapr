@@ -3,22 +3,46 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
- * @title RoadmaprVoting
- * @notice Token escrow contract for Roadmapr voting system
+ * @title RoadmaprVoting - V1 with Immediate Claiming & Global Platform Fee
+ * @notice Token voting contract ready for future upgrades
  *
- * Flow:
- * 1. Project owner registers project with token address, vote increment, and fee recipient
- * 2. Users vote by locking tokens (amount = increment * vote count)
- * 3. 1% fee is collected on each vote
- * 4. When feature is shipped, project owner can claim all locked tokens
- * 5. If feature is not shipped within unlock period, voters can withdraw
+ * V1 FEATURES:
+ * 1. Immediate claiming - owners can claim as soon as feature is "shipped"
+ * 2. Flexible voter withdrawal - voters can withdraw before owner claims
+ * 3. Global platform fee - 1% goes to platform owner (you)
+ * 4. Migration support - ready for future upgrades to verification system
+ *
+ * FLOW:
+ * 1. Users vote by locking tokens (1% fee collected for platform)
+ * 2. Voters can withdraw anytime BEFORE owner claims
+ * 3. Owner marks feature "shipped" → can claim immediately
+ * 4. After owner claims, voters cannot withdraw
+ *
+ * FUTURE UPGRADES (via migration):
+ * - Add community verification period
+ * - Add dispute mechanism
+ * - Add delayed claiming
+ *
+ * MIGRATION:
+ * - Contract supports migrating to future versions
+ * - State preserved during migration
  */
 contract RoadmaprVoting is ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
+
+    // ============================================
+    // Version & Migration
+    // ============================================
+
+    uint256 public constant VERSION = 1;
+    address public migrationContract;
+
+    // Global platform fee recipient (you!)
+    address public platformFeeRecipient;
 
     // ============================================
     // Constants
@@ -26,7 +50,17 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
 
     uint256 public constant FEE_PERCENTAGE = 100; // 1% = 100 basis points
     uint256 public constant FEE_DENOMINATOR = 10000;
-    uint256 public constant DEFAULT_UNLOCK_PERIOD = 7 days;
+
+    // ============================================
+    // Enums
+    // ============================================
+
+    enum FeatureStatus {
+        Open,       // 0: Open for voting
+        Shipped,    // 1: Shipped, owner can claim
+        Claimed,    // 2: Tokens claimed by owner
+        Migrated    // 3: Migrated to new contract
+    }
 
     // ============================================
     // Structs
@@ -35,16 +69,17 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
     struct Project {
         address tokenAddress;
         address owner;
-        address feeRecipient;
-        uint256 voteIncrement;      // Tokens per vote (e.g., 1M tokens = 1 vote)
-        uint256 unlockPeriod;       // Time before voters can withdraw if not shipped
+        uint256 voteIncrement;
         uint256 totalFeesCollected;
+        uint256 totalUpvotes;
+        uint256 totalDownvotes;
         bool exists;
     }
 
     struct Vote {
         address voter;
         uint256 tokensLocked;
+        uint256 feePaid;
         uint256 lockedAt;
         bool isUpvote;
         bool withdrawn;
@@ -56,24 +91,29 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
         uint256 totalUpvoteTokens;
         uint256 totalDownvoteTokens;
         uint256 shippedAt;
-        bool isShipped;
+        FeatureStatus status;
+    }
+
+    struct ProjectVote {
+        address voter;
+        uint256 voteAmount;
+        uint256 feePaid;
+        bool isUpvote;
+        uint256 votedAt;
     }
 
     // ============================================
     // State
     // ============================================
 
-    // projectId => Project
     mapping(bytes32 => Project) public projects;
-
-    // featureId => Feature
     mapping(bytes32 => Feature) public features;
-
-    // featureId => voter => Vote
     mapping(bytes32 => mapping(address => Vote)) public votes;
-
-    // Accumulated fees per project token
     mapping(bytes32 => uint256) public accumulatedFees;
+    mapping(bytes32 => bool) public isMigrated;
+
+    // Project-level voting (for main page upvotes/downvotes)
+    mapping(bytes32 => mapping(address => ProjectVote)) public projectVotes;
 
     // ============================================
     // Events
@@ -86,17 +126,19 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
         uint256 voteIncrement
     );
 
-    event ProjectUpdated(
-        bytes32 indexed projectId,
-        address feeRecipient,
-        uint256 voteIncrement
-    );
-
     event VoteCast(
         bytes32 indexed featureId,
         bytes32 indexed projectId,
         address indexed voter,
         uint256 tokensLocked,
+        uint256 feePaid,
+        bool isUpvote
+    );
+
+    event ProjectVoted(
+        bytes32 indexed projectId,
+        address indexed voter,
+        uint256 voteAmount,
         uint256 feePaid,
         bool isUpvote
     );
@@ -120,17 +162,75 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
         uint256 amount
     );
 
-    event FeesWithdrawn(
+    event PlatformFeesWithdrawn(
         bytes32 indexed projectId,
         address indexed recipient,
         uint256 amount
     );
 
+    event MigrationContractSet(address indexed oldContract, address indexed newContract);
+
+    event FeatureMigrated(
+        bytes32 indexed featureId,
+        address indexed newContract,
+        uint256 votersMigrated
+    );
+
+    event PlatformFeeRecipientUpdated(address indexed oldRecipient, address indexed newRecipient);
+
     // ============================================
     // Constructor
     // ============================================
 
-    constructor() Ownable(msg.sender) {}
+    constructor() Ownable(msg.sender) {
+        // Set platform fee recipient to hardcoded address
+        platformFeeRecipient = 0xC9054316638bf93eF759fda66becEC54248eB4D9;
+    }
+
+    // ============================================
+    // Platform Fee Management
+    // ============================================
+
+    /**
+     * @notice Update global platform fee recipient (contract owner only)
+     */
+    function setPlatformFeeRecipient(address _platformFeeRecipient) external onlyOwner {
+        require(_platformFeeRecipient != address(0), "Invalid address");
+        address oldRecipient = platformFeeRecipient;
+        platformFeeRecipient = _platformFeeRecipient;
+        emit PlatformFeeRecipientUpdated(oldRecipient, _platformFeeRecipient);
+    }
+
+    // ============================================
+    // Migration Functions
+    // ============================================
+
+    /**
+     * @notice Set contract that features can be migrated to
+     */
+    function setMigrationContract(address _migrationContract) external onlyOwner {
+        require(_migrationContract != address(0), "Invalid address");
+        migrationContract = _migrationContract;
+        emit MigrationContractSet(address(this), _migrationContract);
+    }
+
+    /**
+     * @notice Migrate a feature to new contract version
+     */
+    function migrateFeature(bytes32 featureId, address[] calldata voters) external onlyOwner {
+        require(migrationContract != address(0), "No migration contract set");
+        require(!isMigrated[featureId], "Already migrated");
+
+        Feature storage feature = features[featureId];
+        require(feature.projectId != bytes32(0), "Feature does not exist");
+        require(feature.status != FeatureStatus.Migrated, "Already migrated");
+
+        // Mark as migrated
+        feature.status = FeatureStatus.Migrated;
+        isMigrated[featureId] = true;
+
+        emit FeatureMigrated(featureId, migrationContract, voters.length);
+    }
 
     // ============================================
     // Project Management
@@ -138,28 +238,20 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
 
     /**
      * @notice Register a new project for token voting
-     * @param projectId Unique identifier (UUID from database)
-     * @param tokenAddress ERC20 token used for voting
-     * @param voteIncrement Number of tokens per vote increment
-     * @param feeRecipient Address to receive 1% fees (can be same as owner)
      */
     function registerProject(
         bytes32 projectId,
         address tokenAddress,
-        uint256 voteIncrement,
-        address feeRecipient
+        uint256 voteIncrement
     ) external {
         require(!projects[projectId].exists, "Project already exists");
         require(tokenAddress != address(0), "Invalid token address");
         require(voteIncrement > 0, "Vote increment must be > 0");
-        require(feeRecipient != address(0), "Invalid fee recipient");
 
         projects[projectId] = Project({
             tokenAddress: tokenAddress,
             owner: msg.sender,
-            feeRecipient: feeRecipient,
             voteIncrement: voteIncrement,
-            unlockPeriod: DEFAULT_UNLOCK_PERIOD,
             totalFeesCollected: 0,
             exists: true
         });
@@ -168,25 +260,18 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
     }
 
     /**
-     * @notice Update project settings (owner only)
+     * @notice Update project settings
      */
     function updateProject(
         bytes32 projectId,
-        address feeRecipient,
-        uint256 voteIncrement,
-        uint256 unlockPeriod
+        uint256 voteIncrement
     ) external {
         Project storage project = projects[projectId];
         require(project.exists, "Project does not exist");
         require(msg.sender == project.owner, "Not project owner");
         require(voteIncrement > 0, "Vote increment must be > 0");
-        require(feeRecipient != address(0), "Invalid fee recipient");
 
-        project.feeRecipient = feeRecipient;
         project.voteIncrement = voteIncrement;
-        project.unlockPeriod = unlockPeriod;
-
-        emit ProjectUpdated(projectId, feeRecipient, voteIncrement);
     }
 
     /**
@@ -207,10 +292,6 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
 
     /**
      * @notice Cast a vote by locking tokens
-     * @param featureId Unique identifier for the feature (UUID from database)
-     * @param projectId Project this feature belongs to
-     * @param voteCount Number of vote increments (1 = voteIncrement tokens)
-     * @param isUpvote True for upvote, false for downvote
      */
     function vote(
         bytes32 featureId,
@@ -223,7 +304,11 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
         require(voteCount > 0, "Vote count must be > 0");
 
         Feature storage feature = features[featureId];
-        require(!feature.isShipped, "Feature already shipped");
+        require(
+            feature.status == FeatureStatus.Open || feature.projectId == bytes32(0),
+            "Feature not open for voting"
+        );
+        require(feature.status != FeatureStatus.Migrated, "Feature migrated");
 
         Vote storage existingVote = votes[featureId][msg.sender];
         require(existingVote.tokensLocked == 0, "Already voted on this feature");
@@ -240,12 +325,14 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
         // Initialize feature if first vote
         if (feature.projectId == bytes32(0)) {
             feature.projectId = projectId;
+            feature.status = FeatureStatus.Open;
         }
 
         // Record vote
         votes[featureId][msg.sender] = Vote({
             voter: msg.sender,
             tokensLocked: tokensToLock,
+            feePaid: fee,
             lockedAt: block.timestamp,
             isUpvote: isUpvote,
             withdrawn: false,
@@ -259,83 +346,81 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
             feature.totalDownvoteTokens += tokensToLock;
         }
 
-        // Accumulate fees
+        // Accumulate fees for platform
         accumulatedFees[projectId] += fee;
         project.totalFeesCollected += fee;
 
         emit VoteCast(featureId, projectId, msg.sender, tokensToLock, fee, isUpvote);
     }
 
+    // ============================================
+    // Project-Level Voting (Main Page)
+    // ============================================
+
     /**
-     * @notice Change vote direction (requires withdrawing and re-voting)
+     * @notice Vote on a project directly (for main page ranking)
+     * @dev 100% of vote amount goes to platform owner - score cancels but platform claims all
+     * @param projectId Project ID (bytes32)
+     * @param voteAmount Amount of tokens to vote with (using project's token)
+     * @param isUpvote true for upvote, false for downvote
      */
-    function changeVote(
-        bytes32 featureId,
+    function voteProject(
         bytes32 projectId,
-        uint256 voteCount,
+        uint256 voteAmount,
         bool isUpvote
     ) external nonReentrant {
-        // First withdraw existing vote
-        _withdrawVote(featureId, msg.sender, true);
-
-        // Then cast new vote (will handle token transfer)
         Project storage project = projects[projectId];
-        Feature storage feature = features[featureId];
+        require(project.exists, "Project does not exist");
+        require(voteAmount > 0, "Vote amount must be > 0");
+        require(platformFeeRecipient != address(0), "Platform fee recipient not set");
 
-        uint256 tokensToLock = voteCount * project.voteIncrement;
-        uint256 fee = (tokensToLock * FEE_PERCENTAGE) / FEE_DENOMINATOR;
-        uint256 totalRequired = tokensToLock + fee;
+        // Check if user has already voted on this project
+        ProjectVote storage existingVote = projectVotes[projectId][msg.sender];
+        require(existingVote.voteAmount == 0, "Already voted on this project");
 
+        // Transfer 100% of vote amount to platform fee recipient
         IERC20 token = IERC20(project.tokenAddress);
-        token.safeTransferFrom(msg.sender, address(this), totalRequired);
+        token.safeTransferFrom(msg.sender, platformFeeRecipient, voteAmount);
 
-        votes[featureId][msg.sender] = Vote({
+        // Record vote
+        projectVotes[projectId][msg.sender] = ProjectVote({
             voter: msg.sender,
-            tokensLocked: tokensToLock,
-            lockedAt: block.timestamp,
+            voteAmount: voteAmount,
+            feePaid: voteAmount, // 100% is the fee
             isUpvote: isUpvote,
-            withdrawn: false,
-            claimedByOwner: false
+            votedAt: block.timestamp
         });
 
+        // Update project totals (for score display)
         if (isUpvote) {
-            feature.totalUpvoteTokens += tokensToLock;
+            project.totalUpvotes += voteAmount;
         } else {
-            feature.totalDownvoteTokens += tokensToLock;
+            project.totalDownvotes += voteAmount;
         }
 
-        accumulatedFees[projectId] += fee;
-        project.totalFeesCollected += fee;
+        // Track total fees collected (for transparency)
+        accumulatedFees[projectId] += voteAmount;
+        project.totalFeesCollected += voteAmount;
 
-        emit VoteCast(featureId, projectId, msg.sender, tokensToLock, fee, isUpvote);
+        emit ProjectVoted(projectId, msg.sender, voteAmount, voteAmount, isUpvote);
     }
+
+    // ============================================
+    // Vote Withdrawal - Flexible
+    // ============================================
 
     /**
-     * @notice Withdraw tokens if feature not shipped after unlock period
+     * @notice Voters can withdraw anytime BEFORE owner claims
      */
     function withdrawVote(bytes32 featureId) external nonReentrant {
-        _withdrawVote(featureId, msg.sender, false);
-    }
-
-    function _withdrawVote(bytes32 featureId, address voter, bool isChangeVote) internal {
-        Vote storage voteData = votes[featureId][voter];
+        Vote storage voteData = votes[featureId][msg.sender];
         require(voteData.tokensLocked > 0, "No vote to withdraw");
         require(!voteData.withdrawn, "Already withdrawn");
         require(!voteData.claimedByOwner, "Claimed by project owner");
 
         Feature storage feature = features[featureId];
-
-        // Can only withdraw if:
-        // 1. Feature is not shipped AND unlock period has passed, OR
-        // 2. This is a vote change operation
-        if (!isChangeVote) {
-            require(!feature.isShipped, "Feature shipped, tokens claimed by owner");
-            Project storage project = projects[feature.projectId];
-            require(
-                block.timestamp >= voteData.lockedAt + project.unlockPeriod,
-                "Unlock period not reached"
-            );
-        }
+        require(feature.status != FeatureStatus.Claimed, "Feature claimed - cannot withdraw");
+        require(feature.status != FeatureStatus.Migrated, "Feature migrated - use new contract");
 
         uint256 tokensToReturn = voteData.tokensLocked;
         voteData.withdrawn = true;
@@ -348,12 +433,12 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
             feature.totalDownvoteTokens -= tokensToReturn;
         }
 
-        // Return tokens
+        // Return tokens (no refund of fee)
         Project storage project = projects[feature.projectId];
         IERC20 token = IERC20(project.tokenAddress);
-        token.safeTransfer(voter, tokensToReturn);
+        token.safeTransfer(msg.sender, tokensToReturn);
 
-        emit VoteWithdrawn(featureId, voter, tokensToReturn);
+        emit VoteWithdrawn(featureId, msg.sender, tokensToReturn);
     }
 
     // ============================================
@@ -362,17 +447,17 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
 
     /**
      * @notice Mark a feature as shipped (project owner only)
-     * @dev This is called by the backend when status changes to 'shipped'
+     * @dev Once shipped, owner can claim tokens immediately
      */
     function markFeatureShipped(bytes32 featureId) external {
         Feature storage feature = features[featureId];
         require(feature.projectId != bytes32(0), "Feature does not exist");
-        require(!feature.isShipped, "Already shipped");
+        require(feature.status == FeatureStatus.Open, "Already shipped or claimed");
 
         Project storage project = projects[feature.projectId];
         require(msg.sender == project.owner, "Not project owner");
 
-        feature.isShipped = true;
+        feature.status = FeatureStatus.Shipped;
         feature.shippedAt = block.timestamp;
 
         emit FeatureShipped(featureId, feature.projectId, block.timestamp);
@@ -380,15 +465,13 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
 
     /**
      * @notice Claim locked tokens from a shipped feature (project owner only)
-     * @param featureId Feature to claim tokens from
-     * @param voters Array of voter addresses to claim from
      */
     function claimTokens(
         bytes32 featureId,
         address[] calldata voters
     ) external nonReentrant {
         Feature storage feature = features[featureId];
-        require(feature.isShipped, "Feature not shipped");
+        require(feature.status == FeatureStatus.Shipped, "Feature not shipped");
 
         Project storage project = projects[feature.projectId];
         require(msg.sender == project.owner, "Not project owner");
@@ -407,7 +490,7 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
 
         require(totalToClaim > 0, "Nothing to claim");
 
-        // Transfer to project owner
+        feature.status = FeatureStatus.Claimed;
         token.safeTransfer(msg.sender, totalToClaim);
 
         emit TokensClaimed(featureId, feature.projectId, msg.sender, totalToClaim);
@@ -424,7 +507,7 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
 
         for (uint256 i = 0; i < featureIds.length; i++) {
             Feature storage feature = features[featureIds[i]];
-            if (!feature.isShipped) continue;
+            if (feature.status != FeatureStatus.Shipped) continue;
 
             Project storage project = projects[feature.projectId];
             if (msg.sender != project.owner) continue;
@@ -442,6 +525,7 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
             }
 
             if (totalToClaim > 0) {
+                feature.status = FeatureStatus.Claimed;
                 token.safeTransfer(msg.sender, totalToClaim);
                 emit TokensClaimed(featureIds[i], feature.projectId, msg.sender, totalToClaim);
             }
@@ -449,19 +533,17 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
     }
 
     // ============================================
-    // Fee Withdrawal
+    // Platform Fee Withdrawal
     // ============================================
 
     /**
-     * @notice Withdraw accumulated fees (fee recipient only)
+     * @notice Withdraw accumulated 1% platform fees (platform owner only)
      */
-    function withdrawFees(bytes32 projectId) external nonReentrant {
+    function withdrawPlatformFees(bytes32 projectId) external nonReentrant {
+        require(msg.sender == platformFeeRecipient, "Not platform fee recipient");
+
         Project storage project = projects[projectId];
         require(project.exists, "Project does not exist");
-        require(
-            msg.sender == project.feeRecipient || msg.sender == project.owner,
-            "Not fee recipient or owner"
-        );
 
         uint256 fees = accumulatedFees[projectId];
         require(fees > 0, "No fees to withdraw");
@@ -469,9 +551,9 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
         accumulatedFees[projectId] = 0;
 
         IERC20 token = IERC20(project.tokenAddress);
-        token.safeTransfer(project.feeRecipient, fees);
+        token.safeTransfer(platformFeeRecipient, fees);
 
-        emit FeesWithdrawn(projectId, project.feeRecipient, fees);
+        emit PlatformFeesWithdrawn(projectId, platformFeeRecipient, fees);
     }
 
     // ============================================
@@ -482,6 +564,40 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
         return projects[projectId];
     }
 
+    /**
+     * @notice Get project score (upvotes - downvotes) for main page ranking
+     */
+    function getProjectScore(bytes32 projectId) external view returns (int256) {
+        Project storage project = projects[projectId];
+        if (!project.exists) return 0;
+
+        // Return signed score (can be negative if more downvotes)
+        return int256(project.totalUpvotes) - int256(project.totalDownvotes);
+    }
+
+    /**
+     * @notice Get project vote details
+     */
+    function getProjectVotes(bytes32 projectId) external view returns (
+        uint256 totalUpvotes,
+        uint256 totalDownvotes,
+        uint256 totalFeesCollected,
+        int256 score
+    ) {
+        Project storage project = projects[projectId];
+        if (!project.exists) {
+            return (0, 0, 0, 0);
+        }
+
+        score = int256(project.totalUpvotes) - int256(project.totalDownvotes);
+        return (
+            project.totalUpvotes,
+            project.totalDownvotes,
+            project.totalFeesCollected,
+            score
+        );
+    }
+
     function getFeature(bytes32 featureId) external view returns (Feature memory) {
         return features[featureId];
     }
@@ -490,6 +606,40 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
         return votes[featureId][voter];
     }
 
+    /**
+     * @notice Check if voter can withdraw their vote
+     */
+    function canWithdraw(bytes32 featureId, address voter) external view returns (bool) {
+        Vote storage voteData = votes[featureId][voter];
+        Feature storage feature = features[featureId];
+
+        return voteData.tokensLocked > 0 &&
+               !voteData.withdrawn &&
+               !voteData.claimedByOwner &&
+               feature.status != FeatureStatus.Claimed &&
+               feature.status != FeatureStatus.Migrated;
+    }
+
+    /**
+     * @notice Get claimable amount for a shipped feature
+     */
+    function getClaimableAmount(bytes32 featureId, address[] calldata voters) external view returns (uint256) {
+        Feature storage feature = features[featureId];
+        if (feature.status != FeatureStatus.Shipped) return 0;
+
+        uint256 total = 0;
+        for (uint256 i = 0; i < voters.length; i++) {
+            Vote storage voteData = votes[featureId][voters[i]];
+            if (voteData.tokensLocked > 0 && !voteData.withdrawn && !voteData.claimedByOwner) {
+                total += voteData.tokensLocked;
+            }
+        }
+        return total;
+    }
+
+    /**
+     * @notice Get feature vote totals
+     */
     function getFeatureVoteTotals(bytes32 featureId) external view returns (
         uint256 upvoteTokens,
         uint256 downvoteTokens,
@@ -501,32 +651,10 @@ contract RoadmaprVoting is ReentrancyGuard, Ownable {
         netTokens = int256(upvoteTokens) - int256(downvoteTokens);
     }
 
-    function canWithdraw(bytes32 featureId, address voter) external view returns (bool) {
-        Vote storage voteData = votes[featureId][voter];
-        if (voteData.tokensLocked == 0 || voteData.withdrawn || voteData.claimedByOwner) {
-            return false;
-        }
-
-        Feature storage feature = features[featureId];
-        if (feature.isShipped) {
-            return false;
-        }
-
-        Project storage project = projects[feature.projectId];
-        return block.timestamp >= voteData.lockedAt + project.unlockPeriod;
-    }
-
-    function getClaimableAmount(bytes32 featureId, address[] calldata voters) external view returns (uint256) {
-        Feature storage feature = features[featureId];
-        if (!feature.isShipped) return 0;
-
-        uint256 total = 0;
-        for (uint256 i = 0; i < voters.length; i++) {
-            Vote storage voteData = votes[featureId][voters[i]];
-            if (voteData.tokensLocked > 0 && !voteData.withdrawn && !voteData.claimedByOwner) {
-                total += voteData.tokensLocked;
-            }
-        }
-        return total;
+    /**
+     * @notice Get total platform fees for a project
+     */
+    function getPlatformFees(bytes32 projectId) external view returns (uint256) {
+        return accumulatedFees[projectId];
     }
 }
