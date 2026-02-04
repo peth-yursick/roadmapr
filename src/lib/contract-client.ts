@@ -202,6 +202,12 @@ export async function voteOnProject(
     throw new Error("Wallet provider is required");
   }
 
+  // Check if project exists in the smart contract first
+  const projectExists = await getProjectExistsOnChain(projectId);
+  if (!projectExists) {
+    throw new Error("This project hasn't been registered in the voting contract yet. Please contact the project owner to register it.");
+  }
+
   // Get account address from provider first
   let account: Address;
   try {
@@ -221,16 +227,31 @@ export async function voteOnProject(
   console.log("[voteOnProject] Contract address:", contractAddress);
   console.log("[voteOnProject] Project bytes32:", projectBytes32);
 
-  const hash = await walletClient.writeContract({
-    address: contractAddress,
-    abi: ROADMAPR_VOTING_ABI,
-    functionName: "voteProject",
-    args: [projectBytes32, voteAmount, isUpvote],
-    account,
-  });
+  try {
+    const hash = await walletClient.writeContract({
+      address: contractAddress,
+      abi: ROADMAPR_VOTING_ABI,
+      functionName: "voteProject",
+      args: [projectBytes32, voteAmount, isUpvote],
+      account,
+    });
 
-  console.log("[voteOnProject] Transaction hash:", hash);
-  return hash;
+    console.log("[voteOnProject] Transaction hash:", hash);
+    return hash;
+  } catch (error: any) {
+    console.error("[voteOnProject] Transaction failed:", error);
+
+    // Provide better error messages
+    if (error.message?.includes("User rejected")) {
+      throw new Error("Transaction was rejected in your wallet.");
+    }
+
+    if (error.message?.includes("execution reverted") || error.data?.startsWith("0x")) {
+      throw new Error("Transaction failed. The project may not be properly configured in the smart contract, or you may need to approve $ROAD token spending first.");
+    }
+
+    throw error;
+  }
 }
 
 /**
@@ -249,6 +270,39 @@ export async function getProjectScoreOnChain(projectId: string): Promise<bigint>
   });
 
   return score as bigint;
+}
+
+/**
+ * Check if a project exists in the smart contract
+ */
+export async function getProjectExistsOnChain(projectId: string): Promise<boolean> {
+  try {
+    const publicClient = createPublicClientFn();
+    const contractAddress = getContractAddress();
+    const projectBytes32 = uuidToBytes32(projectId);
+
+    const result = await publicClient.readContract({
+      address: contractAddress,
+      abi: ROADMAPR_VOTING_ABI,
+      functionName: "projects",
+      args: [projectBytes32],
+    });
+
+    // The projects function returns a tuple where the last element is 'exists'
+    const projectData = result as readonly [
+      tokenAddress: Address,
+      owner: Address,
+      voteIncrement: bigint,
+      totalFeesCollected: bigint,
+      totalUpvotes: bigint,
+      totalDownvotes: bigint,
+      exists: boolean
+    ];
+    return projectData[6] === true;
+  } catch (error) {
+    console.error("[getProjectExistsOnChain] Error checking project:", error);
+    return false;
+  }
 }
 
 /**
