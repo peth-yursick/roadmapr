@@ -202,15 +202,22 @@ export async function voteOnProject(
     throw new Error("Wallet provider is required");
   }
 
+  // Get account address from provider first
+  let account: Address;
+  try {
+    // Try to get addresses from provider's request method
+    const addresses = await provider.request({ method: 'eth_requestAccounts' });
+    account = addresses[0] as Address;
+    console.log("[voteOnProject] Got account from provider:", account);
+  } catch (error) {
+    console.error("[voteOnProject] Failed to get account from provider:", error);
+    throw new Error("Failed to get wallet address. Please connect your wallet.");
+  }
+
   const walletClient = createWalletClientFromProvider(provider);
   const contractAddress = getContractAddress();
   const projectBytes32 = uuidToBytes32(projectId);
 
-  console.log("[voteOnProject] Wallet client created, getting addresses...");
-
-  const [account] = await walletClient.getAddresses();
-
-  console.log("[voteOnProject] Account:", account);
   console.log("[voteOnProject] Contract address:", contractAddress);
   console.log("[voteOnProject] Project bytes32:", projectBytes32);
 
@@ -302,11 +309,13 @@ export async function withdrawPlatformFeesWithWallet(
   projectId: string,
   provider: any
 ): Promise<Hash> {
+  // Get account address from provider first
+  const addresses = await provider.request({ method: 'eth_requestAccounts' });
+  const account = addresses[0] as Address;
+
   const walletClient = createWalletClientFromProvider(provider);
   const contractAddress = getContractAddress();
   const projectBytes32 = uuidToBytes32(projectId);
-
-  const [account] = await walletClient.getAddresses();
 
   const hash = await walletClient.writeContract({
     address: contractAddress,
@@ -330,10 +339,12 @@ export async function setPlatformFeeRecipientWithWallet(
   newRecipient: Address,
   provider: any
 ): Promise<Hash> {
+  // Get account address from provider first
+  const addresses = await provider.request({ method: 'eth_requestAccounts' });
+  const account = addresses[0] as Address;
+
   const walletClient = createWalletClientFromProvider(provider);
   const contractAddress = getContractAddress();
-
-  const [account] = await walletClient.getAddresses();
 
   const hash = await walletClient.writeContract({
     address: contractAddress,
