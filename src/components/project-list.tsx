@@ -22,6 +22,15 @@ export function ProjectList() {
   const { user } = useAuth();
 
   useEffect(() => {
+    let mounted = true;
+    const timeoutId = setTimeout(() => {
+      if (mounted && loading) {
+        console.error("[ProjectList] Fetch timeout - forcing loading to false");
+        setError("Request timed out. Please refresh the page.");
+        setLoading(false);
+      }
+    }, 10000); // 10 second timeout
+
     async function fetchProjects() {
       try {
         console.log("[ProjectList] Fetching projects...");
@@ -35,16 +44,28 @@ export function ProjectList() {
 
         const data = await res.json();
         console.log("[ProjectList] Received data:", data);
-        setProjects(data.projects || []);
+        if (mounted) {
+          setProjects(data.projects || []);
+        }
       } catch (err) {
         console.error("[ProjectList] Failed to fetch projects:", err);
-        setError(err instanceof Error ? err.message : "Unknown error");
+        if (mounted) {
+          setError(err instanceof Error ? err.message : "Unknown error");
+        }
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
+        clearTimeout(timeoutId);
       }
     }
 
     fetchProjects();
+
+    return () => {
+      mounted = false;
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   function handleVoteChange(projectId: string, newVotes: number, userVote: boolean | null) {
