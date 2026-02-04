@@ -18,16 +18,27 @@ interface Project {
 export function ProjectList() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
 
   useEffect(() => {
     async function fetchProjects() {
       try {
+        console.log("[ProjectList] Fetching projects...");
         const res = await fetch("/api/projects?limit=50");
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error("[ProjectList] API error:", res.status, errorText);
+          throw new Error(`Failed to fetch projects: ${res.status}`);
+        }
+
         const data = await res.json();
+        console.log("[ProjectList] Received data:", data);
         setProjects(data.projects || []);
       } catch (err) {
-        console.error("Failed to fetch projects:", err);
+        console.error("[ProjectList] Failed to fetch projects:", err);
+        setError(err instanceof Error ? err.message : "Unknown error");
       } finally {
         setLoading(false);
       }
@@ -50,6 +61,15 @@ export function ProjectList() {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-muted-foreground">Loading projects...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-destructive mb-2">Error loading projects</p>
+        <p className="text-sm text-muted-foreground">{error}</p>
       </div>
     );
   }
