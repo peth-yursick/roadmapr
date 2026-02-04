@@ -3,7 +3,7 @@
  * Client-side functions using Farcaster miniapp wallet provider
  */
 
-import { createWalletClient, createPublicClient, http, type Address, type Hash } from "viem";
+import { createWalletClient, createPublicClient, http, custom, type Address, type Hash } from "viem";
 import { defineChain } from "viem";
 
 // Contract ABI (functions we use from client)
@@ -141,10 +141,28 @@ export function createPublicClientFn() {
  * Create wallet client from custom provider (e.g., Farcaster SDK provider)
  */
 export function createWalletClientFromProvider(provider: any) {
-  return createWalletClient({
-    chain: baseChain,
-    transport: provider as any,
-  });
+  if (!provider) {
+    throw new Error("Provider is required");
+  }
+
+  console.log("[createWalletClientFromProvider] Provider type:", typeof provider);
+  console.log("[createWalletClientFromProvider] Provider keys:", Object.keys(provider));
+
+  // Check if provider has the expected methods
+  if (typeof provider.request !== 'function' && typeof provider.requestAsync !== 'function') {
+    console.error("[createWalletClientFromProvider] Invalid provider - missing request/requestAsync methods");
+    throw new Error("Invalid provider: must have request or requestAsync method");
+  }
+
+  try {
+    return createWalletClient({
+      chain: baseChain,
+      transport: custom(provider),
+    });
+  } catch (error) {
+    console.error("[createWalletClientFromProvider] Failed to create wallet client:", error);
+    throw error;
+  }
 }
 
 /**
@@ -178,11 +196,23 @@ export async function voteOnProject(
   isUpvote: boolean,
   provider: any
 ): Promise<Hash> {
+  console.log("[voteOnProject] Starting vote", { projectId, voteAmount, isUpvote });
+
+  if (!provider) {
+    throw new Error("Wallet provider is required");
+  }
+
   const walletClient = createWalletClientFromProvider(provider);
   const contractAddress = getContractAddress();
   const projectBytes32 = uuidToBytes32(projectId);
 
+  console.log("[voteOnProject] Wallet client created, getting addresses...");
+
   const [account] = await walletClient.getAddresses();
+
+  console.log("[voteOnProject] Account:", account);
+  console.log("[voteOnProject] Contract address:", contractAddress);
+  console.log("[voteOnProject] Project bytes32:", projectBytes32);
 
   const hash = await walletClient.writeContract({
     address: contractAddress,
@@ -192,6 +222,7 @@ export async function voteOnProject(
     account,
   });
 
+  console.log("[voteOnProject] Transaction hash:", hash);
   return hash;
 }
 
