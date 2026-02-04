@@ -4,10 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
+import { registerProjectInContract } from "@/lib/register-project";
+import { toast } from "sonner";
 
 export default function CreateProjectPage() {
   const router = useRouter();
+  const { walletProvider } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [registering, setRegistering] = useState(false);
   const [error, setError] = useState("");
   const [formData, setFormData] = useState({
     name: "",
@@ -21,6 +26,7 @@ export default function CreateProjectPage() {
     setLoading(true);
 
     try {
+      // Create project in database
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -33,11 +39,32 @@ export default function CreateProjectPage() {
         throw new Error(data.error || "Failed to create project");
       }
 
-      router.push(`/projects/${data.project.project_handle}`);
+      const projectId = data.project.id;
+      const projectHandle = data.project.project_handle;
+
+      // Register project in smart contract to enable voting
+      if (walletProvider) {
+        setRegistering(true);
+        toast.info("Registering project in smart contract...");
+
+        const result = await registerProjectInContract(projectId, walletProvider);
+
+        if (!result.success) {
+          console.error("[CreateProject] Failed to register in smart contract:", result.error);
+          toast.error(`Failed to register in smart contract: ${result.error}`);
+          // Still redirect to project page, just show warning
+        } else {
+          toast.success("Project registered successfully! Voting is now enabled.");
+        }
+      } else {
+        toast.warning("Project created but not registered in smart contract. Voting may not work until registered.");
+      }
+
+      router.push(`/projects/${projectHandle}`);
     } catch (err: any) {
       setError(err.message);
-    } finally {
       setLoading(false);
+      setRegistering(false);
     }
   }
 

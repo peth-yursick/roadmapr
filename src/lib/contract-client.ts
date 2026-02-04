@@ -8,6 +8,18 @@ import { defineChain } from "viem";
 
 // Contract ABI (functions we use from client)
 const ROADMAPR_VOTING_ABI = [
+  // Project registration
+  {
+    "inputs": [
+      {"name": "projectId", "type": "bytes32"},
+      {"name": "tokenAddress", "type": "address"},
+      {"name": "voteIncrement", "type": "uint256"}
+    ],
+    "name": "registerProject",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
   // Project voting (main page)
   {
     "inputs": [
@@ -179,6 +191,64 @@ export async function getPlatformFeeRecipient(): Promise<Address> {
   });
 
   return recipient as Address;
+}
+
+/**
+ * Register a new project in the smart contract
+ * @param projectId - Project UUID
+ * @param tokenAddress - Token address to use for voting (e.g., $ROAD)
+ * @param voteIncrement - Amount of tokens per vote (e.g., 1 million)
+ * @param provider - Wallet provider (e.g., from Farcaster SDK)
+ * @returns Transaction hash
+ */
+export async function registerProject(
+  projectId: string,
+  tokenAddress: Address,
+  voteIncrement: number,
+  provider: any
+): Promise<Hash> {
+  console.log("[registerProject] Registering project", { projectId, tokenAddress, voteIncrement });
+
+  if (!provider) {
+    throw new Error("Wallet provider is required");
+  }
+
+  // Get account address from provider first
+  const addresses = await provider.request({ method: 'eth_requestAccounts' });
+  const account = addresses[0] as Address;
+
+  const walletClient = createWalletClientFromProvider(provider);
+  const contractAddress = getContractAddress();
+  const projectBytes32 = uuidToBytes32(projectId);
+
+  console.log("[registerProject] Contract address:", contractAddress);
+  console.log("[registerProject] Project bytes32:", projectBytes32);
+
+  try {
+    const hash = await walletClient.writeContract({
+      address: contractAddress,
+      abi: ROADMAPR_VOTING_ABI,
+      functionName: "registerProject",
+      args: [projectBytes32, tokenAddress, BigInt(voteIncrement)],
+      account,
+    });
+
+    console.log("[registerProject] Transaction hash:", hash);
+    return hash;
+  } catch (error: any) {
+    console.error("[registerProject] Transaction failed:", error);
+
+    // Provide better error messages
+    if (error.message?.includes("User rejected")) {
+      throw new Error("Transaction was rejected in your wallet.");
+    }
+
+    if (error.message?.includes("Project already exists")) {
+      throw new Error("This project is already registered in the smart contract.");
+    }
+
+    throw error;
+  }
 }
 
 /**
