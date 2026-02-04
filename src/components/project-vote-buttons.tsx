@@ -14,8 +14,6 @@ const VOTE_INCREMENT = 1_000_000;
 interface ProjectVoteButtonsProps {
   projectId: string;
   totalVotes: number;
-  tokenAddress?: string | null;
-  voteIncrement?: number | null;
   onVoteChange?: (newVotes: number, userVote: boolean | null) => void;
 }
 
