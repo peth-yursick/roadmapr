@@ -11,37 +11,48 @@ async function getCurrentUserFid(): Promise<number | null> {
 
 // GET /api/projects - List all projects
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 50);
-  const cursor = searchParams.get("cursor");
-  const search = searchParams.get("search");
+  try {
+    console.log("[API /projects] Fetching projects...");
+    const { searchParams } = new URL(request.url);
+    const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 50);
+    const cursor = searchParams.get("cursor");
+    const search = searchParams.get("search");
 
-  const supabase = await createClient();
+    console.log("[API /projects] Query params:", { limit, cursor, search });
 
-  let query = supabase
-    .from("projects")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(limit);
+    const supabase = await createClient();
 
-  if (search) {
-    query = query.or(`name.ilike.%${search}%,project_handle.ilike.%${search}%`);
+    let query = supabase
+      .from("projects")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (search) {
+      query = query.or(`name.ilike.%${search}%,project_handle.ilike.%${search}%`);
+    }
+
+    if (cursor) {
+      query = query.lt("created_at", cursor);
+    }
+
+    const { data: projects, error } = await query;
+
+    if (error) {
+      console.error("[API /projects] Database error:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    console.log("[API /projects] Success, returning", projects?.length || 0, "projects");
+
+    return NextResponse.json({
+      projects: projects || [],
+      hasMore: (projects || []).length === limit,
+    });
+  } catch (err) {
+    console.error("[API /projects] Unexpected error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-
-  if (cursor) {
-    query = query.lt("created_at", cursor);
-  }
-
-  const { data: projects, error } = await query;
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({
-    projects: projects || [],
-    hasMore: (projects || []).length === limit,
-  });
 }
 
 // POST /api/projects - Create a new project
