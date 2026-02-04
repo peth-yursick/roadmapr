@@ -12,8 +12,6 @@ interface Project {
   project_handle: string;
   bio: string | null;
   total_votes?: number;
-  token_address?: string | null;
-  vote_increment?: number | null;
   created_at: string;
 }
 

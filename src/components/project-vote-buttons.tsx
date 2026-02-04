@@ -6,6 +6,11 @@ import { useAuth } from "@/lib/auth-context";
 import { voteOnProject } from "@/lib/contract-client";
 import { toast } from "sonner";
 
+// $ROAD token on Base - used for all project voting
+const ROAD_TOKEN_ADDRESS = "0xc7aaba6e953a1c0436295cfaaa9b3ab475eb07" as const;
+// Fixed vote increment: 1 million tokens
+const VOTE_INCREMENT = 1_000_000;
+
 interface ProjectVoteButtonsProps {
   projectId: string;
   totalVotes: number;
@@ -17,8 +22,6 @@ interface ProjectVoteButtonsProps {
 export function ProjectVoteButtons({
   projectId,
   totalVotes,
-  tokenAddress,
-  voteIncrement,
   onVoteChange,
 }: ProjectVoteButtonsProps) {
   const { user, walletProvider } = useAuth();
@@ -37,11 +40,6 @@ export function ProjectVoteButtons({
       return;
     }
 
-    if (!tokenAddress || !voteIncrement) {
-      toast.error("This project doesn't support token voting yet");
-      return;
-    }
-
     if (userVote !== null) {
       toast.error("You've already voted on this project");
       return;
@@ -50,10 +48,10 @@ export function ProjectVoteButtons({
     setIsVoting(true);
 
     try {
-      const voteAmount = BigInt(voteIncrement);
+      const voteAmount = BigInt(VOTE_INCREMENT);
       const isUpvote = direction === "up";
 
-      // Vote on-chain (collects 1% fee)
+      // Vote on-chain using $ROAD token (collects 1% fee)
       const txHash = await voteOnProject(projectId, voteAmount, isUpvote, walletProvider);
 
       // Record in database
@@ -65,9 +63,9 @@ export function ProjectVoteButtons({
           voter_fid: user.fid,
           voter_address: user?.custodyAddress || null,
           is_upvote: isUpvote,
-          vote_amount: voteIncrement,
+          vote_amount: VOTE_INCREMENT,
           tx_hash: txHash,
-          token_address: tokenAddress,
+          token_address: ROAD_TOKEN_ADDRESS,
         }),
       });
 

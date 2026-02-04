@@ -9,8 +9,6 @@ interface Project {
   project_handle: string;
   bio: string | null;
   total_votes?: number;
-  token_address?: string | null;
-  vote_increment?: number | null;
 }
 
 interface ProjectCardProps {
@@ -24,8 +22,6 @@ export function ProjectCard({ project, onVoteChange }: ProjectCardProps) {
       <ProjectVoteButtons
         projectId={project.id}
         totalVotes={project.total_votes || 0}
-        tokenAddress={project.token_address}
-        voteIncrement={project.vote_increment}
         onVoteChange={(newVotes, userVote) => onVoteChange?.(project.id, newVotes, userVote)}
       />
       <div className="flex-1 min-w-0">
