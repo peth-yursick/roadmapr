@@ -1,3 +1,5 @@
+"use client";
+
 import { Header } from "@/components/header";
 import { ProjectList } from "@/components/project-list";
 import { useEffect } from "react";
@@ -9,7 +11,7 @@ export const fetchCache = 'force-no-store';
 
 export default function Home() {
   useEffect(() => {
-    console.log('[Roadmapr] Homepage loaded - Version 2025-01-30-v3');
+    console.log('[Roadmapr] Homepage loaded - Version 2025-02-04-v5 (deploy fix)');
   }, []);
   return (
     <div className="min-h-screen">
