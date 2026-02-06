@@ -26,7 +26,7 @@ export async function registerProjectInContract(
     );
 
     // Record registration in database
-    const res = await fetch(`/api/projects/${projectId}/register`, {
+    const res = await fetch(`/api/register-project/${projectId}/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

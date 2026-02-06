@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+
+export const runtime = 'edge';
+
 // Default Farcaster project for backward compatibility
 const DEFAULT_PROJECT_ID = "00000000-0000-0000-0000-000000000001";
 

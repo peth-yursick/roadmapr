@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+
+export const runtime = 'edge';
+
 // POST /api/projects/[handle]/claim-tokens - Claim upvote tokens for a project
 export async function POST(
   request: NextRequest,

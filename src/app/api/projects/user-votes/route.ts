@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 
+
+export const runtime = 'edge';
+
 // GET /api/projects/user-votes - Get current user's project votes
 export async function GET(request: NextRequest) {
   try {

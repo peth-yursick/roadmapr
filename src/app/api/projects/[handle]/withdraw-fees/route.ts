@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { withdrawPlatformFees } from "@/lib/contract";
 
+
+export const runtime = 'edge';
+
 // POST /api/projects/[handle]/withdraw-fees - Withdraw accumulated 1% platform fees
 export async function POST(
   request: NextRequest,

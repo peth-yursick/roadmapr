@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { getNeynarUser, getBulkUsers } from "@/lib/neynar";
 import { cookies } from "next/headers";
 
+
+export const runtime = 'edge';
+
 // Helper to get current user FID from auth context
 async function getCurrentUserFid(): Promise<number | null> {
   // In a real implementation, this would decode the auth token

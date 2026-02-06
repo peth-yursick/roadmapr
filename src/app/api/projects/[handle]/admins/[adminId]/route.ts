@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 
+
+export const runtime = 'edge';
+
 async function getCurrentUserFid(): Promise<number | null> {
   const cookieStore = await cookies();
   const fidCookie = cookieStore.get("user_fid");

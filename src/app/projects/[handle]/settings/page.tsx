@@ -15,7 +15,10 @@ import {
   setPlatformFeeRecipientWithWallet,
   getPlatformFeeRecipient,
   getPlatformFeesOnChain,
+  registerProject,
+  getProjectExistsOnChain,
 } from "@/lib/contract-client";
+import { Info } from "lucide-react";
 
 export default function ProjectSettingsPage() {
   const params = useParams();
@@ -43,6 +46,13 @@ export default function ProjectSettingsPage() {
   const [newFeeRecipient, setNewFeeRecipient] = useState("");
   const [isUpdatingFeeRecipient, setIsUpdatingFeeRecipient] = useState(false);
   const [isWithdrawingFees, setIsWithdrawingFees] = useState(false);
+
+  // Smart contract registration state
+  const [isRegisteredOnChain, setIsRegisteredOnChain] = useState<boolean | null>(null);
+  const [isCheckingRegistration, setIsCheckingRegistration] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [regressionTokenAddress, setRegistrationTokenAddress] = useState("0xc7aaba6e953a1c0436295cfaaa9b3ab475eb07");
+  const [registrationVoteIncrement, setRegistrationVoteIncrement] = useState("1000000");
 
   // Fetch project data
   useEffect(() => {
@@ -97,6 +107,25 @@ export default function ProjectSettingsPage() {
     }
     fetchFeeRecipient();
   }, []);
+
+  // Check if project is registered in smart contract
+  useEffect(() => {
+    async function checkRegistration() {
+      if (!project) return;
+
+      setIsCheckingRegistration(true);
+      try {
+        const registered = await getProjectExistsOnChain(project.id);
+        setIsRegisteredOnChain(registered);
+      } catch (err) {
+        console.error("Failed to check registration:", err);
+        setIsRegisteredOnChain(false);
+      } finally {
+        setIsCheckingRegistration(false);
+      }
+    }
+    checkRegistration();
+  }, [project]);
 
   async function handleSave() {
     if (!project) return;
@@ -223,6 +252,53 @@ export default function ProjectSettingsPage() {
     }
   }
 
+  // Register project in smart contract
+  async function handleRegisterInContract() {
+    if (!project || !walletProvider) {
+      toast.error("Wallet not connected. Open in Farcaster miniapp.");
+      return;
+    }
+
+    if (!regressionTokenAddress || !registrationVoteIncrement) {
+      toast.error("Token address and vote increment are required");
+      return;
+    }
+
+    setIsRegistering(true);
+
+    try {
+      const txHash = await registerProject(
+        project.id,
+        regressionTokenAddress as `0x${string}`,
+        parseFloat(registrationVoteIncrement),
+        walletProvider
+      );
+
+      // Update database with registration info
+      const res = await fetch(`/api/register-project/${project.id}/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          txHash,
+          tokenAddress: regressionTokenAddress,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to record registration");
+      }
+
+      setIsRegisteredOnChain(true);
+      toast.success(`Project registered in smart contract! TX: ${txHash}`);
+    } catch (err) {
+      console.error("Failed to register:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to register project");
+    } finally {
+      setIsRegistering(false);
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-6">
@@ -307,6 +383,91 @@ export default function ProjectSettingsPage() {
             />
           </div>
         </section>
+
+        {/* Smart Contract Registration */}
+        {isOwner && (
+          <section className="space-y-4 pt-6 border-t">
+            <h2 className="text-lg font-semibold">Smart Contract Registration</h2>
+            <p className="text-sm text-muted-foreground">
+              Register this project in the Roadmapr smart contract to enable token voting features.
+            </p>
+
+            {isCheckingRegistration ? (
+              <div className="p-4 bg-muted/50 rounded-lg text-sm text-muted-foreground">
+                Checking registration status...
+              </div>
+            ) : isRegisteredOnChain === true ? (
+              <div className="p-4 bg-green-500/10 border border-green-500/20 text-green-700 dark:text-green-400 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="font-medium">Project is registered in smart contract</span>
+                </div>
+                <p className="text-sm mt-1 opacity-80">
+                  Token voting is enabled for this project
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="p-3 bg-muted/50 rounded-lg text-sm">
+                  <div className="flex items-start gap-2">
+                    <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <p>
+                      This project is not yet registered in the smart contract. Register to enable token voting with $ROAD or other ERC-20 tokens.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">
+                      Token Address
+                    </label>
+                    <Input
+                      type="text"
+                      value={regressionTokenAddress}
+                      onChange={(e) => setRegistrationTokenAddress(e.target.value)}
+                      placeholder="0x..."
+                      pattern="^0x[a-fA-F0-9]{40}$"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Defaults to $ROAD token
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">
+                      Vote Increment
+                    </label>
+                    <Input
+                      type="number"
+                      value={registrationVoteIncrement}
+                      onChange={(e) => setRegistrationVoteIncrement(e.target.value)}
+                      placeholder="1000000"
+                      min="1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Tokens per vote (e.g., 1000000)
+                    </p>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={handleRegisterInContract}
+                  disabled={!walletProvider || isRegistering}
+                >
+                  {isRegistering ? "Registering..." : "Register in Smart Contract"}
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  {!walletProvider
+                    ? "Wallet not connected. Open in Farcaster miniapp to use wallet features."
+                    : "This will call the smart contract to register your project. You'll need to sign the transaction."}
+                </p>
+              </div>
+            )}
+          </section>
+        )}
 
         {/* Token Voting Settings (only for token voting projects) */}
         {project.voting_type === "token" && (

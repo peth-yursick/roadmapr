@@ -1,9 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { SubmitFeatureDialog } from "@/components/submit-feature-dialog";
 import { Button } from "@/components/ui/button";
+import { LogIn, Settings } from "lucide-react";
 
 function ThemeToggle() {
   const [isDark, setIsDark] = useState(true);
@@ -54,40 +57,71 @@ function ThemeToggle() {
 }
 
 export function Header() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, signIn } = useAuth();
+  const [isSigningIn, setIsSigningIn] = useState(false);
+
+  async function handleSignIn() {
+    setIsSigningIn(true);
+    try {
+      await signIn();
+    } catch (err) {
+      console.error("Sign-in failed:", err);
+      // Fallback message
+      alert("Please open this app in the Farcaster miniapp to sign in, or try again.");
+    } finally {
+      setIsSigningIn(false);
+    }
+  }
 
   return (
     <header className="border-b border-border/50 sticky top-0 bg-background/80 backdrop-blur-md z-50">
-      <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold">Roadmapr</h1>
-          <p className="text-xs text-muted-foreground">Where do we go?</p>
+      <div className="max-w-2xl mx-auto px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold">Roadmapr</h1>
+            <p className="text-xs text-muted-foreground">Where do we go?</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            {!isLoading && user && (
+              <>
+                <div className="flex items-center gap-2">
+                  {user.pfpUrl && (
+                    <img
+                      src={user.pfpUrl}
+                      alt=""
+                      className="w-7 h-7 rounded-full"
+                    />
+                  )}
+                  <span className="text-sm text-muted-foreground hidden sm:inline">
+                    @{user.username}
+                  </span>
+                </div>
+              </>
+            )}
+            {!isLoading && !user && (
+              <Button
+                size="sm"
+                onClick={handleSignIn}
+                disabled={isSigningIn}
+                className="gap-1.5"
+              >
+                <LogIn className="w-4 h-4" />
+                {isSigningIn ? "Signing in..." : "Sign In"}
+              </Button>
+            )}
+            {!isLoading && !user && (
+              <span className="text-xs text-muted-foreground hidden lg:inline">
+                or open in Farcaster app
+              </span>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          {!isLoading && user && (
-            <>
-              <SubmitFeatureDialog onSubmitted={() => window.location.reload()} />
-              <div className="flex items-center gap-2">
-                {user.pfpUrl && (
-                  <img
-                    src={user.pfpUrl}
-                    alt=""
-                    className="w-7 h-7 rounded-full"
-                  />
-                )}
-                <span className="text-sm text-muted-foreground hidden sm:inline">
-                  @{user.username}
-                </span>
-              </div>
-            </>
-          )}
-          {!isLoading && !user && (
-            <span className="text-sm text-muted-foreground">
-              Open in Warpcast to sign in
-            </span>
-          )}
-        </div>
+        {!isLoading && user && (
+          <div className="flex justify-end mt-3">
+            <SubmitFeatureDialog onSubmitted={() => window.location.reload()} />
+          </div>
+        )}
       </div>
     </header>
   );

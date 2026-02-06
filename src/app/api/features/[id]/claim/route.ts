@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { claimFeatureTokens } from "@/lib/contract";
 
+
+export const runtime = 'edge';
+
 // POST /api/features/[id]/claim - Claim tokens from a shipped feature
 export async function POST(
   request: NextRequest,

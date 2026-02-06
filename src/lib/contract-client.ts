@@ -369,7 +369,12 @@ export async function getProjectExistsOnChain(projectId: string): Promise<boolea
       exists: boolean
     ];
     return projectData[6] === true;
-  } catch (error) {
+  } catch (error: any) {
+    // If we get a PositionOutOfBoundsError or other data errors, the project doesn't exist
+    if (error.name === 'PositionOutOfBoundsError' || error.message?.includes('out of bounds')) {
+      console.log("[getProjectExistsOnChain] Project not registered in contract:", projectId);
+      return false;
+    }
     console.error("[getProjectExistsOnChain] Error checking project:", error);
     return false;
   }

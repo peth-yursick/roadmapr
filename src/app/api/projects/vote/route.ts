@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+
+export const runtime = 'edge';
+
 // POST /api/projects/vote - Vote on a project (upvote or downvote)
 export async function POST(request: NextRequest) {
   try {
