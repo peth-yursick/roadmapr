@@ -44,22 +44,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Sign-in function for web users
   const signIn = async () => {
     try {
+      console.log("[Auth] Starting Privy login...");
+      console.log("[Auth] Privy ready:", ready);
+      console.log("[Auth] Privy authenticated:", authenticated);
       await login();
-    } catch (error) {
-      console.error("Sign-in error:", error);
-      throw new Error("Authentication failed. Please try again.");
+      console.log("[Auth] Privy login successful");
+    } catch (error: any) {
+      console.error("[Auth] Sign-in error:", error);
+      console.error("[Auth] Error details:", {
+        name: error?.name,
+        message: error?.message,
+        code: error?.code,
+        stack: error?.stack
+      });
+      throw error;
     }
   };
 
   useEffect(() => {
     async function init() {
+      console.log("[Auth] Initializing auth state...");
+      console.log("[Auth] Privy ready:", ready);
+      console.log("[Auth] Privy authenticated:", authenticated);
+
       // If not ready, wait for Privy to initialize
       if (!ready) {
+        console.log("[Auth] Waiting for Privy to be ready...");
         return;
       }
 
       // Check if user is authenticated via Privy
       if (authenticated && privyUser) {
+        console.log("[Auth] User authenticated via Privy:", privyUser);
         // Extract Farcaster account from Privy user
         const farcasterAccount = privyUser.linkedAccounts.find(
           (account: any) => account.type === "farcaster"

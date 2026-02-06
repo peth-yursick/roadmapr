@@ -64,10 +64,11 @@ export function Header() {
     setIsSigningIn(true);
     try {
       await signIn();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Sign-in failed:", err);
-      // Fallback message
-      alert("Please open this app in the Farcaster miniapp to sign in, or try again.");
+      // Show actual error message for debugging
+      const errorMsg = err?.message || err?.toString() || "Unknown error";
+      alert(`Sign-in failed: ${errorMsg}\n\nCheck browser console for details.`);
     } finally {
       setIsSigningIn(false);
     }
