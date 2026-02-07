@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Header } from "@/components/header";
 
 // Fixed values for main page voting - all projects use the same token
-const ROAD_TOKEN_ADDRESS = "0xc7aaba6e953a1c0436295cfaaa9b3ab475eb07f" as const;
+const ROAD_TOKEN_ADDRESS = "0xc7aaba6e953a1c0436295cfaaaea9b3ab475eb07" as const;
 const VOTE_INCREMENT = 1000000; // 1 million tokens
 
 export default function RegisterProjectPage() {
@@ -141,7 +141,7 @@ export default function RegisterProjectPage() {
           <div className="p-3 bg-muted/50 rounded-lg text-sm">
             <strong>Voting configuration:</strong>
             <ul className="list-disc list-inside text-xs text-muted-foreground mt-1 space-y-1">
-              <li>Token: $ROAD (0xc7aaba6e953a1c0436295cfaaa9b3ab475eb07f)</li>
+              <li>Token: $ROAD (0xc7aaba6e953a1c0436295cfaaaea9b3ab475eb07)</li>
               <li>Vote increment: 1,000,000 tokens</li>
               <li>Chain: Base</li>
             </ul>

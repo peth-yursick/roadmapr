@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 export const runtime = 'edge';
 
 // Fixed values for main page voting
-const ROAD_TOKEN_ADDRESS = "0xc7aaba6e953a1c0436295cfaaa9b3ab475eb07f";
+const ROAD_TOKEN_ADDRESS = "0xc7aaba6e953a1c0436295cfaaaea9b3ab475eb07";
 const VOTE_INCREMENT = 1000000;
 const VOTE_INCREMENT_USD = 0.01;
 

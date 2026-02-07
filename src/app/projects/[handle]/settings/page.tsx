@@ -51,7 +51,7 @@ export default function ProjectSettingsPage() {
   const [isRegisteredOnChain, setIsRegisteredOnChain] = useState<boolean | null>(null);
   const [isCheckingRegistration, setIsCheckingRegistration] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
-  const [regressionTokenAddress, setRegistrationTokenAddress] = useState("0xc7aaba6e953a1c0436295cfaaa9b3ab475eb07f");
+  const [regressionTokenAddress, setRegistrationTokenAddress] = useState("0xc7aaba6e953a1c0436295cfaaaea9b3ab475eb07");
   const [registrationVoteIncrement, setRegistrationVoteIncrement] = useState("1000000");
 
   // Fetch project data

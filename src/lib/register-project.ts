@@ -13,7 +13,7 @@ export async function registerProjectInContract(
   provider: any
 ): Promise<{ success: boolean; error?: string; txHash?: string }> {
   // $ROAD token on Base
-  const ROAD_TOKEN_ADDRESS = "0xc7aaba6e953a1c0436295cfaaa9b3ab475eb07f" as const;
+  const ROAD_TOKEN_ADDRESS = "0xc7aaba6e953a1c0436295cfaaaea9b3ab475eb07" as const;
   const VOTE_INCREMENT = 1_000_000; // 1 million tokens
 
   try {
