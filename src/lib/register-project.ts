@@ -1,9 +1,9 @@
-import { registerProject as registerProjectOnChain, uuidToBytes32 } from "./contract-client";
+import { registerProjectForFeatureVoting, uuidToBytes32 } from "./contract-client";
 import { useAuth } from "./auth-context";
 
 /**
- * Register a project in the smart contract
- * This should be called when a new project is created to enable voting
+ * Register a project for feature voting in the smart contract
+ * This should be called when a project wants to enable token-based feature voting
  *
  * @param projectId - The project UUID
  * @returns Object with success status and error message if failed
@@ -17,8 +17,8 @@ export async function registerProjectInContract(
   const VOTE_INCREMENT = 1_000_000; // 1 million tokens
 
   try {
-    // Register project in smart contract
-    const txHash = await registerProjectOnChain(
+    // Register project in smart contract for feature voting
+    const txHash = await registerProjectForFeatureVoting(
       projectId,
       ROAD_TOKEN_ADDRESS,
       VOTE_INCREMENT,

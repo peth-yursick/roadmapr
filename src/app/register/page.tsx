@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { registerProject } from "@/lib/contract-client";
+import { registerProjectForFeatureVoting } from "@/lib/contract-client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,7 +42,7 @@ export default function RegisterProjectPage() {
 
     try {
       // Register in the smart contract with fixed values
-      const txHash = await registerProject(
+      const txHash = await registerProjectForFeatureVoting(
         projectId,
         ROAD_TOKEN_ADDRESS,
         VOTE_INCREMENT,

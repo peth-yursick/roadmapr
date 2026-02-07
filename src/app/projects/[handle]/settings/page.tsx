@@ -15,8 +15,8 @@ import {
   setPlatformFeeRecipientWithWallet,
   getPlatformFeeRecipient,
   getPlatformFeesOnChain,
-  registerProject,
-  getProjectExistsOnChain,
+  registerProjectForFeatureVoting,
+  isProjectRegisteredForFeatureVoting,
 } from "@/lib/contract-client";
 import { Info } from "lucide-react";
 
@@ -115,7 +115,7 @@ export default function ProjectSettingsPage() {
 
       setIsCheckingRegistration(true);
       try {
-        const registered = await getProjectExistsOnChain(project.id);
+        const registered = await isProjectRegisteredForFeatureVoting(project.id);
         setIsRegisteredOnChain(registered);
       } catch (err) {
         console.error("Failed to check registration:", err);
@@ -267,7 +267,7 @@ export default function ProjectSettingsPage() {
     setIsRegistering(true);
 
     try {
-      const txHash = await registerProject(
+      const txHash = await registerProjectForFeatureVoting(
         project.id,
         regressionTokenAddress as `0x${string}`,
         parseFloat(registrationVoteIncrement),

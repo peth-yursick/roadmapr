@@ -3,13 +3,8 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
-import { voteOnProject } from "@/lib/contract-client";
+import { voteOnProjectRanking } from "@/lib/contract-client";
 import { toast } from "sonner";
-
-// $ROAD token on Base - used for all project voting
-const ROAD_TOKEN_ADDRESS = "0xc7aaba6e953a1c0436295cfaaaea9b3ab475eb07" as const;
-// Fixed vote increment: 1 million tokens
-const VOTE_INCREMENT = 1_000_000;
 
 interface ProjectVoteButtonsProps {
   projectId: string;
@@ -46,11 +41,10 @@ export function ProjectVoteButtons({
     setIsVoting(true);
 
     try {
-      const voteAmount = BigInt(VOTE_INCREMENT);
       const isUpvote = direction === "up";
 
-      // Vote on-chain using $ROAD token (collects 1% fee)
-      const txHash = await voteOnProject(projectId, voteAmount, isUpvote, walletProvider);
+      // Vote on-chain for project ranking
+      const txHash = await voteOnProjectRanking(projectId, isUpvote, walletProvider);
 
       // Record in database
       const res = await fetch("/api/projects/vote", {
@@ -61,9 +55,8 @@ export function ProjectVoteButtons({
           voter_fid: user.fid,
           voter_address: user?.custodyAddress || null,
           is_upvote: isUpvote,
-          vote_amount: VOTE_INCREMENT,
+          vote_amount: 1,
           tx_hash: txHash,
-          token_address: ROAD_TOKEN_ADDRESS,
         }),
       });
 
