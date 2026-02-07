@@ -42,9 +42,18 @@ export function VotingProvider({ children }: { children: ReactNode }) {
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        setPendingVotes(parsed);
+        // If parsed data is not an array (old format), clear it
+        if (Array.isArray(parsed)) {
+          setPendingVotes(parsed);
+        } else {
+          // Old format from Map-based storage - clear it
+          localStorage.removeItem("pendingVotesArray");
+          setPendingVotes([]);
+        }
       } catch (e) {
         console.error("Failed to parse pending votes:", e);
+        localStorage.removeItem("pendingVotesArray");
+        setPendingVotes([]);
       }
     }
   }, []);
