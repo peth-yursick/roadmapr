@@ -22,29 +22,19 @@ export function ProjectVoteButtons({
   const { user } = useAuth();
   const {
     addPendingVote,
-    removePendingVote,
-    hasPendingVote,
-    getPendingVote,
+    getPendingVotesForProject,
   } = useVoting();
 
   const [currentVotes, setCurrentVotes] = useState(totalVotes);
-  const [userVote, setUserVote] = useState<boolean | null>(null);
-  const [pendingVote, setPendingVote] = useState<boolean | null>(null);
 
-  // Update local state when pending vote changes
-  useEffect(() => {
-    const vote = getPendingVote(projectId);
-    if (vote) {
-      setPendingVote(vote.isUpvote);
-    } else {
-      setPendingVote(null);
-    }
-  }, [getPendingVote, projectId]);
+  // Get pending votes for this project
+  const pendingVotesForProject = getPendingVotesForProject(projectId);
+  const pendingUpvotes = pendingVotesForProject.filter(v => v.isUpvote).length;
+  const pendingDownvotes = pendingVotesForProject.filter(v => !v.isUpvote).length;
+  const netPendingVotes = pendingUpvotes - pendingDownvotes;
 
-  // Calculate display votes (current + pending if different direction)
-  const displayVotes = pendingVote !== null
-    ? (pendingVote ? currentVotes + 1 : currentVotes - 1)
-    : currentVotes;
+  // Display votes = current + pending
+  const displayVotes = currentVotes + netPendingVotes;
 
   function handleVote(direction: "up" | "down") {
     if (!user) {
@@ -56,9 +46,8 @@ export function ProjectVoteButtons({
 
     // Add to pending queue
     addPendingVote(projectId, projectName, isUpvote);
-    setUserVote(isUpvote);
 
-    toast(`${isUpvote ? "Upvote" : "Downvote"} added to queue`);
+    toast(`${isUpvote ? "Upvote" : "Downvote"} added`);
   }
 
   return (
@@ -67,9 +56,9 @@ export function ProjectVoteButtons({
         variant="ghost"
         size="sm"
         className={`h-7 w-7 p-0 rounded-full ${
-          pendingVote === true || userVote === true
+          netPendingVotes > 0 || pendingUpvotes > 0
             ? "text-primary bg-primary/10"
-            : pendingVote === false
+            : netPendingVotes < 0 || pendingDownvotes > 0
             ? "text-muted-foreground/50"
             : "text-muted-foreground hover:text-foreground"
         }`}
@@ -87,9 +76,9 @@ export function ProjectVoteButtons({
         variant="ghost"
         size="sm"
         className={`h-7 w-7 p-0 rounded-full ${
-          pendingVote === false || userVote === false
+          netPendingVotes < 0 || pendingDownvotes > 0
             ? "text-destructive bg-destructive/10"
-            : pendingVote === true
+            : netPendingVotes > 0 || pendingUpvotes > 0
             ? "text-muted-foreground/50"
             : "text-muted-foreground hover:text-foreground"
         }`}

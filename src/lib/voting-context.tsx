@@ -16,35 +16,33 @@ export interface PendingVote {
 }
 
 interface VotingContextType {
-  pendingVotes: Map<string, PendingVote>;
+  pendingVotes: PendingVote[];
   addPendingVote: (projectId: string, projectName: string, isUpvote: boolean) => void;
-  removePendingVote: (projectId: string) => void;
-  hasPendingVote: (projectId: string) => boolean;
-  getPendingVote: (projectId: string) => PendingVote | undefined;
-  clearPendingVotes: () => void;
+  removePendingVote: (projectId: string, isUpvote: boolean) => void;
+  getPendingVotesForProject: (projectId: string) => PendingVote[];
   getTotalVotes: () => number;
+  clearPendingVotes: () => void;
 }
 
 const VotingContext = createContext<VotingContextType>({
-  pendingVotes: new Map(),
+  pendingVotes: [],
   addPendingVote: () => {},
   removePendingVote: () => {},
-  hasPendingVote: () => false,
-  getPendingVote: () => undefined,
-  clearPendingVotes: () => {},
+  getPendingVotesForProject: () => [],
   getTotalVotes: () => 0,
+  clearPendingVotes: () => {},
 });
 
 export function VotingProvider({ children }: { children: ReactNode }) {
-  const [pendingVotes, setPendingVotes] = useState<Map<string, PendingVote>>(new Map());
+  const [pendingVotes, setPendingVotes] = useState<PendingVote[]>([]);
 
   // Load from localStorage on mount
   useEffect(() => {
-    const stored = localStorage.getItem("pendingVotes");
+    const stored = localStorage.getItem("pendingVotesArray");
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        setPendingVotes(new Map(Object.entries(parsed)));
+        setPendingVotes(parsed);
       } catch (e) {
         console.error("Failed to parse pending votes:", e);
       }
@@ -53,48 +51,45 @@ export function VotingProvider({ children }: { children: ReactNode }) {
 
   // Save to localStorage when pendingVotes changes
   useEffect(() => {
-    if (pendingVotes.size > 0) {
-      const obj = Object.fromEntries(pendingVotes);
-      localStorage.setItem("pendingVotes", JSON.stringify(obj));
+    if (pendingVotes.length > 0) {
+      localStorage.setItem("pendingVotesArray", JSON.stringify(pendingVotes));
     } else {
-      localStorage.removeItem("pendingVotes");
+      localStorage.removeItem("pendingVotesArray");
     }
   }, [pendingVotes]);
 
   const addPendingVote = useCallback((projectId: string, projectName: string, isUpvote: boolean) => {
     setPendingVotes((prev) => {
-      // Create a new Map from the previous one
-      const next = new Map(prev);
-      // Add or update the vote for this project
-      next.set(projectId, { projectId, projectName, isUpvote });
-      // Return the new Map - this preserves all other pending votes
-      return next;
+      // Add a new vote to the array (allows multiple votes per project)
+      return [...prev, { projectId, projectName, isUpvote }];
     });
   }, []);
 
-  const removePendingVote = useCallback((projectId: string) => {
+  const removePendingVote = useCallback((projectId: string, isUpvote: boolean) => {
     setPendingVotes((prev) => {
-      const next = new Map(prev);
-      next.delete(projectId);
-      return next;
+      // Remove the most recent vote for this project with matching direction
+      const index = [...prev].reverse().findIndex(
+        v => v.projectId === projectId && v.isUpvote === isUpvote
+      );
+      if (index !== -1) {
+        const actualIndex = prev.length - 1 - index;
+        return prev.filter((_, i) => i !== actualIndex);
+      }
+      return prev;
     });
   }, []);
 
-  const hasPendingVote = useCallback((projectId: string): boolean => {
-    return pendingVotes.has(projectId);
-  }, [pendingVotes]);
-
-  const getPendingVote = useCallback((projectId: string): PendingVote | undefined => {
-    return pendingVotes.get(projectId);
+  const getPendingVotesForProject = useCallback((projectId: string): PendingVote[] => {
+    return pendingVotes.filter(v => v.projectId === projectId);
   }, [pendingVotes]);
 
   const clearPendingVotes = useCallback(() => {
-    setPendingVotes(new Map());
+    setPendingVotes([]);
   }, []);
 
   const getTotalVotes = useCallback((): number => {
-    return pendingVotes.size;
-  }, [pendingVotes.size]);
+    return pendingVotes.length;
+  }, [pendingVotes.length]);
 
   return (
     <VotingContext.Provider
@@ -102,10 +97,9 @@ export function VotingProvider({ children }: { children: ReactNode }) {
         pendingVotes,
         addPendingVote,
         removePendingVote,
-        hasPendingVote,
-        getPendingVote,
-        clearPendingVotes,
+        getPendingVotesForProject,
         getTotalVotes,
+        clearPendingVotes,
       }}
     >
       {children}

@@ -45,7 +45,8 @@ export function VoteConfirmationBar() {
   const totalTokensNeeded = totalPendingVotes * VOTE_PRICE_TOKENS;
   const feeTokens = Math.floor(totalTokensNeeded * FEE_PERCENTAGE);
   const totalTokensWithFee = totalTokensNeeded + feeTokens;
-  const estimatedUsd = (totalTokensWithFee / 1e18) * roadPriceUsd;
+  // totalTokensWithFee is in token units (1M tokens per vote), not wei
+  const estimatedUsd = (totalTokensWithFee / 1_000_000) * roadPriceUsd;
 
   async function handleConfirm() {
     if (!walletProvider) {
@@ -58,7 +59,7 @@ export function VoteConfirmationBar() {
     try {
       // Execute all pending votes using token-based voting
       const results = await Promise.allSettled(
-        Array.from(pendingVotes.values()).map(async (vote) => {
+        pendingVotes.map(async (vote) => {
           try {
             const txHash = await voteOnProjectWithTokens(
               vote.projectId,
@@ -201,9 +202,9 @@ export function VoteConfirmationBar() {
 
             {/* Pending votes list */}
             <div className="max-h-40 overflow-y-auto space-y-2">
-              {Array.from(pendingVotes.values()).map((vote) => (
+              {pendingVotes.map((vote, index) => (
                 <div
-                  key={vote.projectId}
+                  key={`${vote.projectId}-${index}`}
                   className="flex items-center justify-between text-sm p-2 bg-background rounded border"
                 >
                   <div className="flex items-center gap-2">
