@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth-context";
 import { Providers } from "@/components/providers";
+import { VoteConfirmationBar } from "@/components/vote-confirmation-bar";
 import "./globals.css";
 
 const inter = Inter({
@@ -75,6 +76,7 @@ export default function RootLayout({
         <Providers>
           <AuthProvider>
             {children}
+            <VoteConfirmationBar />
             <Toaster />
           </AuthProvider>
         </Providers>

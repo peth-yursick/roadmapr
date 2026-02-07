@@ -1,83 +1,69 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
-import { voteOnProjectRanking } from "@/lib/contract-client";
+import { useVoting } from "@/lib/voting-context";
 import { toast } from "sonner";
 
 interface ProjectVoteButtonsProps {
   projectId: string;
+  projectName: string;
   totalVotes: number;
   onVoteChange?: (newVotes: number, userVote: boolean | null) => void;
 }
 
 export function ProjectVoteButtons({
   projectId,
+  projectName,
   totalVotes,
   onVoteChange,
 }: ProjectVoteButtonsProps) {
-  const { user, walletProvider } = useAuth();
-  const [isVoting, setIsVoting] = useState(false);
+  const { user } = useAuth();
+  const {
+    addPendingVote,
+    removePendingVote,
+    hasPendingVote,
+    getPendingVote,
+  } = useVoting();
+
   const [currentVotes, setCurrentVotes] = useState(totalVotes);
   const [userVote, setUserVote] = useState<boolean | null>(null);
+  const [pendingVote, setPendingVote] = useState<boolean | null>(null);
 
-  async function handleVote(direction: "up" | "down") {
+  // Update local state when pending vote changes
+  useEffect(() => {
+    const vote = getPendingVote(projectId);
+    if (vote) {
+      setPendingVote(vote.isUpvote);
+    } else {
+      setPendingVote(null);
+    }
+  }, [getPendingVote, projectId]);
+
+  function handleVote(direction: "up" | "down") {
     if (!user) {
       toast.error("Please connect your wallet to vote");
       return;
     }
 
-    if (!walletProvider) {
-      toast.error("Wallet not connected. Please connect your wallet first.");
+    const isUpvote = direction === "up";
+
+    // If clicking the same button that's already pending, remove it
+    if (pendingVote === isUpvote) {
+      removePendingVote(projectId);
+      setUserVote(null);
+      onVoteChange?.(currentVotes, null);
       return;
     }
 
-    if (userVote !== null) {
-      toast.error("You've already voted on this project");
-      return;
-    }
+    // If clicking the opposite button, change the pending vote
+    // Otherwise, add new pending vote
+    addPendingVote(projectId, projectName, isUpvote);
+    setUserVote(isUpvote);
+    onVoteChange?.(currentVotes + (isUpvote ? 1 : -1), isUpvote);
 
-    setIsVoting(true);
-
-    try {
-      const isUpvote = direction === "up";
-
-      // Vote on-chain for project ranking
-      const txHash = await voteOnProjectRanking(projectId, isUpvote, walletProvider);
-
-      // Record in database
-      const res = await fetch("/api/projects/vote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          project_id: projectId,
-          voter_fid: user.fid,
-          voter_address: user?.custodyAddress || null,
-          is_upvote: isUpvote,
-          vote_amount: 1,
-          tx_hash: txHash,
-        }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to record vote");
-      }
-
-      const data = await res.json();
-
-      setCurrentVotes(data.total_votes || 0);
-      setUserVote(isUpvote);
-      onVoteChange?.(data.total_votes || 0, isUpvote);
-
-      toast.success(`${isUpvote ? "Upvote" : "Downvote"} recorded! TX: ${txHash.slice(0, 10)}...`);
-    } catch (err) {
-      console.error("Vote error:", err);
-      toast.error(err instanceof Error ? err.message : "Failed to vote");
-    } finally {
-      setIsVoting(false);
-    }
+    toast.success(`${isUpvote ? "Upvote" : "Downvote"} added to queue`);
   }
 
   return (
@@ -85,9 +71,14 @@ export function ProjectVoteButtons({
       <Button
         variant="ghost"
         size="sm"
-        className={`h-7 w-7 p-0 rounded-full ${userVote === true ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"}`}
+        className={`h-7 w-7 p-0 rounded-full ${
+          pendingVote === true || userVote === true
+            ? "text-primary bg-primary/10"
+            : pendingVote === false
+            ? "text-muted-foreground/50"
+            : "text-muted-foreground hover:text-foreground"
+        }`}
         onClick={() => handleVote("up")}
-        disabled={isVoting || userVote !== null}
         aria-label="Upvote"
       >
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
@@ -100,9 +91,14 @@ export function ProjectVoteButtons({
       <Button
         variant="ghost"
         size="sm"
-        className={`h-7 w-7 p-0 rounded-full ${userVote === false ? "text-destructive bg-destructive/10" : "text-muted-foreground hover:text-foreground"}`}
+        className={`h-7 w-7 p-0 rounded-full ${
+          pendingVote === false || userVote === false
+            ? "text-destructive bg-destructive/10"
+            : pendingVote === true
+            ? "text-muted-foreground/50"
+            : "text-muted-foreground hover:text-foreground"
+        }`}
         onClick={() => handleVote("down")}
-        disabled={isVoting || userVote !== null}
         aria-label="Downvote"
       >
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">

@@ -21,6 +21,7 @@ export function ProjectCard({ project, onVoteChange }: ProjectCardProps) {
     <div className="flex gap-4 p-4 border-b border-border/50 hover:bg-muted/20 transition-colors">
       <ProjectVoteButtons
         projectId={project.id}
+        projectName={project.name}
         totalVotes={project.total_votes || 0}
         onVoteChange={(newVotes, userVote) => onVoteChange?.(project.id, newVotes, userVote)}
       />
