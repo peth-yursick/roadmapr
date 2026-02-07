@@ -364,6 +364,24 @@ export async function voteOnProjectWithTokens(
     const votePrice = BigInt(1_000_000) * BigInt(10 ** 18); // 1 million tokens per vote
     const requiredAllowance = BigInt(voteCount) * votePrice;
 
+    // Check user's token balance
+    const tokenBalance = await publicClient.readContract({
+      address: ROAD_TOKEN_ADDRESS,
+      abi: [{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}],
+      functionName: "balanceOf",
+      args: [account],
+    }) as bigint;
+
+    console.log("[voteOnProjectWithTokens] Token balance check:", {
+      tokenBalance: tokenBalance.toString(),
+      requiredTokens: (BigInt(voteCount) * votePrice).toString(),
+      hasEnough: tokenBalance >= BigInt(voteCount) * votePrice
+    });
+
+    if (tokenBalance < BigInt(voteCount) * votePrice) {
+      throw new Error(`Insufficient $ROAD token balance. You need ${(Number(voteCount) * 1_000_000).toLocaleString()} $ROAD tokens but only have ${(Number(tokenBalance) / 1e18).toLocaleString()} tokens.`);
+    }
+
     console.log("[voteOnProjectWithTokens] Allowance check:", { currentAllowance: currentAllowance.toString(), requiredAllowance: requiredAllowance.toString() });
 
     // Approve tokens if needed
@@ -403,17 +421,43 @@ export async function voteOnProjectWithTokens(
     console.log("[voteOnProjectWithTokens] Sending vote transaction...");
 
     // Send vote transaction using provider.request
-    const hash = await provider.request({
-      method: 'eth_sendTransaction',
-      params: [{
-        from: account,
-        to: contractAddress,
-        data: voteData,
-      }],
-    }) as Hash;
+    try {
+      const hash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{
+          from: account,
+          to: contractAddress,
+          data: voteData,
+        }],
+      }) as Hash;
 
-    console.log("[voteOnProjectWithTokens] Transaction hash:", hash);
-    return hash;
+      console.log("[voteOnProjectWithTokens] Transaction hash:", hash);
+
+      // Wait for transaction to be mined and check receipt
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      console.log("[voteOnProjectWithTokens] Transaction receipt:", receipt);
+
+      if (receipt.status === 'reverted') {
+        throw new Error("Transaction was reverted by the smart contract. This usually means you don't have enough $ROAD tokens to complete the vote.");
+      }
+
+      return hash;
+    } catch (txError: any) {
+      console.error("[voteOnProjectWithTokens] Transaction error:", txError);
+
+      // Parse common error messages
+      if (txError.message?.includes("insufficient balance") || txError.message?.includes("exceeds balance")) {
+        throw new Error("Insufficient $ROAD token balance for this transaction.");
+      }
+      if (txError.message?.includes("User rejected") || txError.code === 4001) {
+        throw new Error("Transaction was rejected in your wallet.");
+      }
+      if (txError.data?.message) {
+        throw new Error(`Transaction failed: ${txError.data.message}`);
+      }
+
+      throw txError;
+    }
   } catch (error: any) {
     console.error("[voteOnProjectWithTokens] Transaction failed:", error);
 
