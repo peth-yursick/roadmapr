@@ -48,6 +48,16 @@ export function VoteConfirmationBar() {
   // totalTokensWithFee is in token units (1M tokens per vote), not wei
   const estimatedUsd = (totalTokensWithFee / 1_000_000) * roadPriceUsd;
 
+  console.log("[VoteConfirmationBar] Cost calculation:", {
+    totalPendingVotes,
+    totalTokensNeeded,
+    feeTokens,
+    totalTokensWithFee,
+    roadPriceUsd,
+    estimatedUsd,
+    pendingVotes,
+  });
+
   async function handleConfirm() {
     if (!walletProvider) {
       toast.error("Please connect your wallet first");

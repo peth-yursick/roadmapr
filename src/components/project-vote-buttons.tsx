@@ -37,6 +37,8 @@ export function ProjectVoteButtons({
   const displayVotes = currentVotes + netPendingVotes;
 
   function handleVote(direction: "up" | "down") {
+    console.log("[VoteButtons] handleVote called", { direction, projectId, user, projectName });
+
     if (!user) {
       toast.error("Please connect your wallet to vote");
       return;
@@ -45,7 +47,9 @@ export function ProjectVoteButtons({
     const isUpvote = direction === "up";
 
     // Add to pending queue
+    console.log("[VoteButtons] Calling addPendingVote", { projectId, projectName, isUpvote });
     addPendingVote(projectId, projectName, isUpvote);
+    console.log("[VoteButtons] addPendingVote called, checking localStorage...", localStorage.getItem("pendingVotesArray"));
 
     toast(`${isUpvote ? "Upvote" : "Downvote"} added`);
   }
