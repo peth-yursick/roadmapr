@@ -64,6 +64,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Set user from standard wallet connection (MetaMask, etc.)
   const setWalletUser = (walletAddress: string) => {
+    // Set cookie for server-side authentication
+    document.cookie = `wallet_address=${walletAddress}; path=/; max-age=604800`; // 7 days
+
     const userData: User = {
       fid: 0, // No FID for wallet-only users
       username: walletAddress.slice(0, 8),

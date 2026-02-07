@@ -10,10 +10,15 @@ interface RegisterRequest {
   tokenAddress: string;
 }
 
-async function getCurrentUserFid(): Promise<number | null> {
+async function getCurrentUser(): Promise<{ fid: number | null; walletAddress: string | null }> {
   const cookieStore = await cookies();
   const fidCookie = cookieStore.get("user_fid");
-  return fidCookie ? parseInt(fidCookie.value) : null;
+  const walletCookie = cookieStore.get("wallet_address");
+
+  return {
+    fid: fidCookie ? parseInt(fidCookie.value) : null,
+    walletAddress: walletCookie?.value || null,
+  };
 }
 
 // POST /api/projects/[projectId]/register - Record project registration in smart contract
@@ -21,10 +26,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
-  const currentFid = await getCurrentUserFid();
+  const { fid, walletAddress } = await getCurrentUser();
 
-  if (!currentFid) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Allow either Farcaster (fid) or wallet authentication
+  if (!fid && !walletAddress) {
+    return NextResponse.json({ error: "Unauthorized - please connect your wallet or sign in" }, { status: 401 });
   }
 
   const { projectId } = await params;
@@ -40,7 +46,7 @@ export async function POST(
 
   const supabase = await createClient();
 
-  // Verify the user is the project owner
+  // Get project to verify ownership
   const { data: project } = await supabase
     .from("projects")
     .select("creator_fid, owner_fid")
@@ -51,7 +57,9 @@ export async function POST(
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
 
-  if (project.creator_fid !== currentFid && project.owner_fid !== currentFid) {
+  // Verify ownership - for wallet-only users, we skip ownership check
+  // since they're registering via their own wallet transaction
+  if (fid && project.creator_fid !== fid && project.owner_fid !== fid) {
     return NextResponse.json(
       { error: "Only the project owner can register the project" },
       { status: 403 }
