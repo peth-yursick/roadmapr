@@ -27,10 +27,17 @@ export function VoteConfirmationBar() {
   useEffect(() => {
     async function fetchPrice() {
       try {
-        // Use a simple fallback price for now
-        setRoadPriceUsd(0.01);
+        // Try to fetch real price from CoinGecko
+        const response = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=roadmap&vs_currencies=usd");
+        if (response.ok) {
+          const data = await response.json();
+          const price = data.roadmap?.usd || 0.000001; // Fallback to very small price
+          setRoadPriceUsd(price);
+        } else {
+          setRoadPriceUsd(0.000001); // Very small fallback
+        }
       } catch (e) {
-        setRoadPriceUsd(0.01);
+        setRoadPriceUsd(0.000001); // Very small fallback
       }
     }
     fetchPrice();

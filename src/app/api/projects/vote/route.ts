@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if already voted - use different logic for wallet-only vs Farcaster users
+    // Note: Token-based voting allows multiple votes, so we update existing records
     let existingVote;
     if (voter_fid === 0) {
       // Wallet-only user: check by voter_address
@@ -68,26 +69,38 @@ export async function POST(request: NextRequest) {
       existingVote = data;
     }
 
+    let voteError;
     if (existingVote) {
-      return NextResponse.json(
-        { error: "Already voted on this project" },
-        { status: 400 }
-      );
+      // Update existing vote record (add to vote_amount)
+      const newVoteAmount = (existingVote.vote_amount || 0) + vote_amount;
+      // Update is_upvote based on latest vote direction
+      const { error } = await supabase
+        .from("project_votes")
+        .update({
+          vote_amount: newVoteAmount,
+          is_upvote: is_upvote,
+          tx_hash, // Update with latest tx hash
+          tokens_locked: newVoteAmount,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingVote.id);
+      voteError = error;
+    } else {
+      // Create new vote record
+      const { error } = await supabase
+        .from("project_votes")
+        .insert({
+          project_id,
+          voter_fid,
+          voter_address: voter_address || null,
+          vote_amount,
+          is_upvote: is_upvote,
+          tx_hash,
+          token_address: token_address || null,
+          tokens_locked: vote_amount, // Full amount locked (not just fee)
+        });
+      voteError = error;
     }
-
-    // Create vote record
-    const { error: voteError } = await supabase
-      .from("project_votes")
-      .insert({
-        project_id,
-        voter_fid,
-        voter_address: voter_address || null,
-        vote_amount,
-        is_upvote: is_upvote,
-        tx_hash,
-        token_address: token_address || null,
-        tokens_locked: vote_amount, // Full amount locked (not just fee)
-      });
 
     if (voteError) {
       return NextResponse.json({ error: voteError.message }, { status: 500 });

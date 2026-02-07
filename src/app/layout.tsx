@@ -4,7 +4,6 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth-context";
 import { VotingProvider } from "@/lib/voting-context";
 import { Providers } from "@/components/providers";
-import { VoteConfirmationBar } from "@/components/vote-confirmation-bar";
 import "./globals.css";
 
 const inter = Inter({
@@ -78,7 +77,6 @@ export default function RootLayout({
           <VotingProvider>
             <AuthProvider>
               {children}
-              <VoteConfirmationBar />
               <Toaster />
             </AuthProvider>
           </VotingProvider>
