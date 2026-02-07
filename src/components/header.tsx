@@ -6,7 +6,8 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { SubmitFeatureDialog } from "@/components/submit-feature-dialog";
 import { Button } from "@/components/ui/button";
-import { LogIn, Settings } from "lucide-react";
+import { LogIn, Settings, Wallet } from "lucide-react";
+import { useAccount, useConnect, useDisconnect } from "wagmi";
 
 function ThemeToggle() {
   const [isDark, setIsDark] = useState(true);
@@ -56,8 +57,40 @@ function ThemeToggle() {
   );
 }
 
+function WalletConnectButton() {
+  const { address, isConnected } = useAccount();
+  const { connect, connectors, isPending } = useConnect();
+  const { disconnect } = useDisconnect();
+
+  if (isConnected && address) {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => disconnect()}
+        className="gap-1.5 text-xs"
+      >
+        <Wallet className="w-3 h-3" />
+        {address.slice(0, 6)}...{address.slice(-4)}
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      size="sm"
+      onClick={() => connect({ connector: connectors[0] })}
+      disabled={isPending}
+      className="gap-1.5"
+    >
+      <Wallet className="w-4 h-4" />
+      {isPending ? "Connecting..." : "Connect Wallet"}
+    </Button>
+  );
+}
+
 export function Header() {
-  const { user, isLoading, signIn } = useAuth();
+  const { user, isLoading, signIn, walletAddress } = useAuth();
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   async function handleSignIn() {
@@ -66,13 +99,21 @@ export function Header() {
       await signIn();
     } catch (err: any) {
       console.error("Sign-in failed:", err);
-      // Show actual error message for debugging
       const errorMsg = err?.message || err?.toString() || "Unknown error";
-      alert(`Sign-in failed: ${errorMsg}\n\nCheck browser console for details.`);
+      alert(`Sign-in failed: ${errorMsg}\n\nTry connecting your wallet instead.`);
     } finally {
       setIsSigningIn(false);
     }
   }
+
+  // Get display text for user
+  const getUserDisplay = () => {
+    if (walletAddress && user?.fid === 0) {
+      // Connected via wallet
+      return `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
+    }
+    return user?.username || "User";
+  };
 
   return (
     <header className="border-b border-border/50 sticky top-0 bg-background/80 backdrop-blur-md z-50">
@@ -95,26 +136,27 @@ export function Header() {
                     />
                   )}
                   <span className="text-sm text-muted-foreground hidden sm:inline">
-                    @{user.username}
+                    @{getUserDisplay()}
                   </span>
                 </div>
               </>
             )}
             {!isLoading && !user && (
-              <Button
-                size="sm"
-                onClick={handleSignIn}
-                disabled={isSigningIn}
-                className="gap-1.5"
-              >
-                <LogIn className="w-4 h-4" />
-                {isSigningIn ? "Signing in..." : "Sign In"}
-              </Button>
-            )}
-            {!isLoading && !user && (
-              <span className="text-xs text-muted-foreground hidden lg:inline">
-                or open in Farcaster app
-              </span>
+              <>
+                <WalletConnectButton />
+                <div className="hidden lg:flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleSignIn}
+                    disabled={isSigningIn}
+                    className="gap-1.5 text-xs"
+                  >
+                    <LogIn className="w-3 h-3" />
+                    {isSigningIn ? "Signing in..." : "Sign in with Farcaster"}
+                  </Button>
+                </div>
+              </>
             )}
           </div>
         </div>

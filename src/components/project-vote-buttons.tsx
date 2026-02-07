@@ -28,13 +28,13 @@ export function ProjectVoteButtons({
   const [userVote, setUserVote] = useState<boolean | null>(null);
 
   async function handleVote(direction: "up" | "down") {
-    if (!user?.fid) {
-      toast.error("Sign in with Farcaster to vote");
+    if (!user) {
+      toast.error("Please connect your wallet to vote");
       return;
     }
 
     if (!walletProvider) {
-      toast.error("Wallet not connected. Open in Farcaster miniapp.");
+      toast.error("Wallet not connected. Please connect your wallet first.");
       return;
     }
 

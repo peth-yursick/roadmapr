@@ -9,6 +9,7 @@ import {
 } from "react";
 import sdk from "@farcaster/miniapp-sdk";
 import { usePrivy } from "@privy-io/react-auth";
+import { useAccount, useConnectorClient } from "wagmi";
 
 interface User {
   fid: number;
@@ -22,8 +23,10 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthorizedMarker: boolean;
-  walletProvider: any; // Wallet provider from Farcaster SDK
+  walletProvider: any;
+  walletAddress: string | null;
   signIn: () => Promise<void>;
+  setWalletUser: (address: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -31,7 +34,9 @@ const AuthContext = createContext<AuthContextType>({
   isLoading: true,
   isAuthorizedMarker: false,
   walletProvider: null,
+  walletAddress: null,
   signIn: async () => {},
+  setWalletUser: async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -39,33 +44,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthorizedMarker, setIsAuthorizedMarker] = useState(false);
   const [walletProvider, setWalletProvider] = useState<any>(null);
-  const { ready, authenticated, login, user: privyUser, getEthereumProvider } = usePrivy();
+  const { ready, authenticated, login, user: privyUser } = usePrivy();
 
-  // Sign-in function for web users
+  // Wagmi hooks for standard wallet connection
+  const { address, isConnected: isWagmiConnected } = useAccount();
+  const { data: wagmiWalletClient } = useConnectorClient();
+
+  // Sign-in function for web users (Privy-based)
   const signIn = async () => {
     try {
       console.log("[Auth] Starting Privy login...");
-      console.log("[Auth] Privy ready:", ready);
-      console.log("[Auth] Privy authenticated:", authenticated);
       await login();
       console.log("[Auth] Privy login successful");
     } catch (error: any) {
       console.error("[Auth] Sign-in error:", error);
-      console.error("[Auth] Error details:", {
-        name: error?.name,
-        message: error?.message,
-        code: error?.code,
-        stack: error?.stack
-      });
       throw error;
     }
   };
+
+  // Set user from standard wallet connection (MetaMask, etc.)
+  const setWalletUser = (walletAddress: string) => {
+    const userData: User = {
+      fid: 0, // No FID for wallet-only users
+      username: walletAddress.slice(0, 8),
+      displayName: walletAddress.slice(0, 8),
+      pfpUrl: "",
+      custodyAddress: walletAddress,
+    };
+    setUser(userData);
+    setIsAuthorizedMarker(false);
+  };
+
+  // Update wallet provider when wagmi client changes
+  useEffect(() => {
+    if (wagmiWalletClient && isWagmiConnected && address) {
+      console.log("[Auth] Connected via wagmi wallet:", address);
+      setWalletProvider(wagmiWalletClient);
+      setWalletUser(address);
+    }
+  }, [wagmiWalletClient, isWagmiConnected, address]);
 
   useEffect(() => {
     async function init() {
       console.log("[Auth] Initializing auth state...");
       console.log("[Auth] Privy ready:", ready);
       console.log("[Auth] Privy authenticated:", authenticated);
+      console.log("[Auth] Wagmi connected:", isWagmiConnected);
+      console.log("[Auth] Wagmi address:", address);
+
+      // If user is connected via wagmi, prioritize that
+      if (isWagmiConnected && address) {
+        console.log("[Auth] User connected via wagmi wallet");
+        setWalletUser(address);
+        setIsLoading(false);
+        return;
+      }
 
       // If not ready, wait for Privy to initialize
       if (!ready) {
@@ -81,30 +114,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           (account: any) => account.type === "farcaster"
         );
 
+        // Set user data - prefer Farcaster account if available, otherwise use email/wallet
         if (farcasterAccount) {
+          const fc = farcasterAccount as any;
           const userData: User = {
-            fid: farcasterAccount.fid,
-            username: farcasterAccount.username || `fid:${farcasterAccount.fid}`,
-            displayName: farcasterAccount.displayName || farcasterAccount.username || `fid:${farcasterAccount.fid}`,
-            pfpUrl: farcasterAccount.pfpUrl || "",
+            fid: fc.fid,
+            username: fc.username || `fid:${fc.fid}`,
+            displayName: fc.displayName || fc.username || `fid:${fc.fid}`,
+            pfpUrl: fc.pfpUrl || "",
             custodyAddress: privyUser.wallet?.address,
           };
           setUser(userData);
 
           const markerFids = process.env.NEXT_PUBLIC_AUTHORIZED_MARKER_FIDS?.split(",").map(Number) || [];
           setIsAuthorizedMarker(markerFids.includes(userData.fid));
+        } else {
+          // Web-only login (email/wallet) - create user without Farcaster
+          const emailAccount = privyUser.linkedAccounts.find(
+            (account: any) => account.type === "email"
+          ) as any;
+          const walletAccount = privyUser.linkedAccounts.find(
+            (account: any) => account.type === "wallet"
+          ) as any;
 
-          // Get wallet provider from Privy
-          try {
-            const provider = await getEthereumProvider();
-            setWalletProvider(provider);
-          } catch (e) {
-            console.log("No wallet provider from Privy");
-          }
+          const userData: User = {
+            fid: 0, // No FID for web-only users
+            username: emailAccount?.address || walletAccount?.address?.slice(0, 8) || "web-user",
+            displayName: emailAccount?.address || walletAccount?.address?.slice(0, 8) || "Web User",
+            pfpUrl: "",
+            custodyAddress: privyUser.wallet?.address,
+          };
+          setUser(userData);
 
-          setIsLoading(false);
-          return;
+          // Web-only users are not authorized markers
+          setIsAuthorizedMarker(false);
         }
+
+        setIsLoading(false);
+        return;
       }
 
       // Fallback: try Farcaster miniapp SDK
@@ -155,10 +202,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     init();
-  }, [ready, authenticated, privyUser, getEthereumProvider]);
+  }, [ready, authenticated, privyUser, isWagmiConnected, address]);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isAuthorizedMarker, walletProvider, signIn }}>
+    <AuthContext.Provider value={{ user, isLoading, isAuthorizedMarker, walletProvider, walletAddress: address || null, signIn, setWalletUser }}>
       {children}
     </AuthContext.Provider>
   );

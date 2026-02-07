@@ -18,9 +18,17 @@ export async function POST(request: NextRequest) {
       token_address = null,
     } = body;
 
-    if (!project_id || !voter_fid) {
+    if (!project_id) {
       return NextResponse.json(
-        { error: "project_id and voter_fid are required" },
+        { error: "project_id is required" },
+        { status: 400 }
+      );
+    }
+
+    // For wallet-only users (fid: 0), require voter_address
+    if (voter_fid === 0 && !voter_address) {
+      return NextResponse.json(
+        { error: "voter_address is required for wallet-only users" },
         { status: 400 }
       );
     }
@@ -38,13 +46,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    // Check if already voted
-    const { data: existingVote } = await supabase
-      .from("project_votes")
-      .select("*")
-      .eq("project_id", project_id)
-      .eq("voter_fid", voter_fid)
-      .single();
+    // Check if already voted - use different logic for wallet-only vs Farcaster users
+    let existingVote;
+    if (voter_fid === 0) {
+      // Wallet-only user: check by voter_address
+      const { data } = await supabase
+        .from("project_votes")
+        .select("*")
+        .eq("project_id", project_id)
+        .eq("voter_address", voter_address)
+        .single();
+      existingVote = data;
+    } else {
+      // Farcaster user: check by voter_fid
+      const { data } = await supabase
+        .from("project_votes")
+        .select("*")
+        .eq("project_id", project_id)
+        .eq("voter_fid", voter_fid)
+        .single();
+      existingVote = data;
+    }
 
     if (existingVote) {
       return NextResponse.json(
