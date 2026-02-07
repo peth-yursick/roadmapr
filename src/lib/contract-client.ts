@@ -358,17 +358,20 @@ export async function getProjectExistsOnChain(projectId: string): Promise<boolea
       args: [projectBytes32],
     });
 
-    // The projects function returns a tuple where the last element is 'exists'
-    const projectData = result as readonly [
-      tokenAddress: Address,
-      owner: Address,
-      voteIncrement: bigint,
-      totalFeesCollected: bigint,
-      totalUpvotes: bigint,
-      totalDownvotes: bigint,
-      exists: boolean
-    ];
-    return projectData[6] === true;
+    // viem returns named outputs as an object when the ABI has output names
+    const projectData = result as {
+      tokenAddress: Address;
+      owner: Address;
+      voteIncrement: bigint;
+      totalFeesCollected: bigint;
+      totalUpvotes: bigint;
+      totalDownvotes: bigint;
+      exists: boolean;
+    };
+
+    console.log("[getProjectExistsOnChain] Project data:", { projectId, exists: projectData.exists });
+
+    return projectData.exists === true;
   } catch (error: any) {
     // If we get a PositionOutOfBoundsError or other data errors, the project doesn't exist
     if (error.name === 'PositionOutOfBoundsError' || error.message?.includes('out of bounds')) {
@@ -400,14 +403,15 @@ export async function getProjectVotesOnChain(projectId: string): Promise<{
     args: [projectBytes32],
   });
 
-  const [totalUpvotes, totalDownvotes, totalFeesCollected, score] = result as [
-    bigint,
-    bigint,
-    bigint,
-    bigint
-  ];
+  // viem returns named outputs as an object when the ABI has output names
+  const votesData = result as {
+    totalUpvotes: bigint;
+    totalDownvotes: bigint;
+    totalFeesCollected: bigint;
+    score: bigint;
+  };
 
-  return { totalUpvotes, totalDownvotes, totalFeesCollected, score };
+  return votesData;
 }
 
 /**
