@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth-context";
+import { VotingProvider } from "@/lib/voting-context";
 import { Providers } from "@/components/providers";
 import { VoteConfirmationBar } from "@/components/vote-confirmation-bar";
 import "./globals.css";
@@ -74,11 +75,13 @@ export default function RootLayout({
         className={`${inter.variable} antialiased bg-background text-foreground`}
       >
         <Providers>
-          <AuthProvider>
-            {children}
-            <VoteConfirmationBar />
-            <Toaster />
-          </AuthProvider>
+          <VotingProvider>
+            <AuthProvider>
+              {children}
+              <VoteConfirmationBar />
+              <Toaster />
+            </AuthProvider>
+          </VotingProvider>
         </Providers>
       </body>
     </html>
