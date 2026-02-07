@@ -7,7 +7,7 @@ import { voteOnProject } from "@/lib/contract-client";
 import { toast } from "sonner";
 
 // $ROAD token on Base - used for all project voting
-const ROAD_TOKEN_ADDRESS = "0xc7aaba6e953a1c0436295cfaaa9b3ab475eb07" as const;
+const ROAD_TOKEN_ADDRESS = "0xc7aaba6e953a1c0436295cfaaa9b3ab475eb07f" as const;
 // Fixed vote increment: 1 million tokens
 const VOTE_INCREMENT = 1_000_000;
 
