@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
-import { voteOnProjectWithTokens } from "@/lib/contract-client";
+import { useVoting } from "@/lib/voting-context";
 import { toast } from "sonner";
 
 interface ProjectVoteButtonsProps {
@@ -19,62 +19,32 @@ export function ProjectVoteButtons({
   totalVotes,
   onVoteChange,
 }: ProjectVoteButtonsProps) {
-  const { user, walletProvider } = useAuth();
-  const [currentVotes, setCurrentVotes] = useState(totalVotes);
-  const [isVoting, setIsVoting] = useState(false);
+  const { user } = useAuth();
+  const { addPendingVote, getPendingVotesForProject } = useVoting();
 
-  async function handleVote(direction: "up" | "down") {
+  const [currentVotes, setCurrentVotes] = useState(totalVotes);
+
+  // Get pending votes for this project
+  const pendingVotesForProject = getPendingVotesForProject(projectId);
+  const pendingUpvotes = pendingVotesForProject.filter(v => v.isUpvote).length;
+  const pendingDownvotes = pendingVotesForProject.filter(v => !v.isUpvote).length;
+  const netPendingVotes = pendingUpvotes - pendingDownvotes;
+
+  // Display votes = current + pending
+  const displayVotes = currentVotes + netPendingVotes;
+
+  function handleVote(direction: "up" | "down") {
     if (!user) {
       toast.error("Please connect your wallet to vote");
       return;
     }
 
-    if (!walletProvider) {
-      toast.error("Please connect your wallet to vote");
-      return;
-    }
-
     const isUpvote = direction === "up";
-    setIsVoting(true);
 
-    try {
-      console.log("[VoteButtons] Voting", { projectId, projectName, isUpvote });
+    // Add to pending queue
+    addPendingVote(projectId, projectName, isUpvote);
 
-      // Send transaction directly
-      const txHash = await voteOnProjectWithTokens(
-        projectId,
-        1, // 1 vote per click
-        isUpvote,
-        walletProvider
-      );
-
-      console.log("[VoteButtons] Transaction successful:", txHash);
-
-      // Update vote count visually
-      setCurrentVotes(prev => isUpvote ? prev + 1 : prev - 1);
-
-      // Record in database
-      await fetch("/api/projects/vote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          project_id: projectId,
-          voter_fid: user?.fid || 0,
-          voter_address: user?.custodyAddress || null,
-          is_upvote: isUpvote,
-          vote_amount: 1_000_000,
-          tx_hash: txHash,
-          token_address: "0xc7aaba6e953a1c0436295cfaaaea9b3ab475eb07",
-        }),
-      });
-
-      toast.success(`${isUpvote ? "Upvote" : "Downvote"} successful!`);
-    } catch (error: any) {
-      console.error("[VoteButtons] Vote failed:", error);
-      toast.error(error.message || "Vote failed. Please try again.");
-    } finally {
-      setIsVoting(false);
-    }
+    toast(`${isUpvote ? "Upvote" : "Downvote"} added to queue`);
   }
 
   return (
@@ -83,31 +53,33 @@ export function ProjectVoteButtons({
         variant="ghost"
         size="sm"
         className={`h-7 w-7 p-0 rounded-full ${
-          isVoting
-            ? "opacity-50 cursor-not-allowed"
+          netPendingVotes > 0 || pendingUpvotes > 0
+            ? "text-primary bg-primary/10"
+            : netPendingVotes < 0 || pendingDownvotes > 0
+            ? "text-muted-foreground/50"
             : "text-muted-foreground hover:text-foreground"
         }`}
         onClick={() => handleVote("up")}
-        disabled={isVoting}
         aria-label="Upvote"
       >
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
           <path d="M8 4l5 6H3z" />
         </svg>
       </Button>
-      <span className="text-sm font-semibold tabular-nums" title={currentVotes.toString()}>
-        {currentVotes}
+      <span className="text-sm font-semibold tabular-nums" title={displayVotes.toString()}>
+        {displayVotes}
       </span>
       <Button
         variant="ghost"
         size="sm"
         className={`h-7 w-7 p-0 rounded-full ${
-          isVoting
-            ? "opacity-50 cursor-not-allowed"
+          netPendingVotes < 0 || pendingDownvotes > 0
+            ? "text-destructive bg-destructive/10"
+            : netPendingVotes > 0 || pendingUpvotes > 0
+            ? "text-muted-foreground/50"
             : "text-muted-foreground hover:text-foreground"
         }`}
         onClick={() => handleVote("down")}
-        disabled={isVoting}
         aria-label="Downvote"
       >
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">

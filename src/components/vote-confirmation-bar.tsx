@@ -237,16 +237,9 @@ export function VoteConfirmationBar() {
                 <span className="text-muted-foreground">Platform fee (1%):</span>
                 <span className="font-medium">{(feeTokens / 1_000_000).toFixed(4)}M</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Estimated USD:</span>
-                <span className="font-medium">${estimatedUsd.toFixed(2)}</span>
+              <div className="pt-2 border-t text-xs text-muted-foreground">
+                Each vote costs 1,000,000 $ROAD tokens
               </div>
-              {roadPriceUsd > 0 && (
-                <div className="pt-2 border-t text-xs text-muted-foreground">
-                  @ ${(estimatedUsd / totalPendingVotes).toFixed(4)} per vote
-                  (${(roadPriceUsd * 1_000_000).toFixed(2)} $ROAD per 1M tokens)
-                </div>
-              )}
             </div>
 
             {/* Pending votes list */}
