@@ -361,7 +361,7 @@ export async function voteOnProjectWithTokens(
       args: [account, contractAddress],
     }) as bigint;
 
-    const votePrice = 1_000_000n * 10n ** 18n; // 1 million tokens per vote
+    const votePrice = BigInt(1_000_000) * BigInt(10 ** 18); // 1 million tokens per vote
     const requiredAllowance = BigInt(voteCount) * votePrice;
 
     console.log("[voteOnProjectWithTokens] Allowance check:", { currentAllowance: currentAllowance.toString(), requiredAllowance: requiredAllowance.toString() });
