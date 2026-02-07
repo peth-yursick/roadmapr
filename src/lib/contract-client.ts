@@ -7,7 +7,7 @@
  * 2. RoadmaprVoting - Complex token-based voting for features within projects
  */
 
-import { createWalletClient, createPublicClient, http, custom, type Address, type Hash } from "viem";
+import { createWalletClient, createPublicClient, http, custom, encodeFunctionData, type Address, type Hash } from "viem";
 import { defineChain } from "viem";
 
 // ============================================
@@ -325,6 +325,7 @@ export function getProjectRankingTokenAddress(): Address {
 /**
  * Vote on a project using $ROAD tokens
  * Users can vote multiple times by spending more tokens
+ * Compatible with limited providers like Farcaster miniapp
  */
 export async function voteOnProjectWithTokens(
   projectId: string,
@@ -341,54 +342,82 @@ export async function voteOnProjectWithTokens(
   const addresses = await provider.request({ method: 'eth_requestAccounts' });
   const account = addresses[0] as Address;
 
-  const walletClient = createWalletClientFromProvider(provider);
+  const publicClient = createPublicClientFn();
   const contractAddress = getProjectRankingTokenAddress();
   const projectBytes32 = uuidToBytes32(projectId);
 
   console.log("[voteOnProjectWithTokens] Contract address:", contractAddress);
   console.log("[voteOnProjectWithTokens] Project bytes32:", projectBytes32);
+  console.log("[voteOnProjectWithTokens] Account:", account);
 
   try {
-    // First, approve tokens if needed
     const ROAD_TOKEN_ADDRESS = "0xC7aABA6E953A1c0436295CFaAAeA9B3aB475EB07" as const;
 
-    // Check allowance and approve if needed
-    const currentAllowance = await (walletClient as any).readContract({
+    // Check allowance using public client (read operation)
+    const currentAllowance = await publicClient.readContract({
       address: ROAD_TOKEN_ADDRESS,
       abi: [{"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}],
       functionName: "allowance",
       args: [account, contractAddress],
-    });
+    }) as bigint;
 
-    const votePrice = 1_000_000 * 1e18; // 1 million tokens per vote
-    const requiredAllowance = BigInt(voteCount) * BigInt(votePrice);
+    const votePrice = 1_000_000n * 10n ** 18n; // 1 million tokens per vote
+    const requiredAllowance = BigInt(voteCount) * votePrice;
 
+    console.log("[voteOnProjectWithTokens] Allowance check:", { currentAllowance: currentAllowance.toString(), requiredAllowance: requiredAllowance.toString() });
+
+    // Approve tokens if needed
     if (currentAllowance < requiredAllowance) {
       console.log("[voteOnProjectWithTokens] Approving tokens...");
-      const approveTx = await (walletClient as any).writeContract({
-        address: ROAD_TOKEN_ADDRESS,
+
+      // Encode approve function call
+      const approveData = encodeFunctionData({
         abi: [{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"}],
         functionName: "approve",
         args: [contractAddress, requiredAllowance],
-        account,
       });
-      console.log("[voteOnProjectWithTokens] Approve tx:", approveTx);
+
+      const approveTx = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{
+          from: account,
+          to: ROAD_TOKEN_ADDRESS,
+          data: approveData,
+        }],
+      });
+
+      console.log("[voteOnProjectWithTokens] Approve tx hash:", approveTx);
+
+      // Wait for approval transaction
+      await publicClient.waitForTransactionReceipt({ hash: approveTx as Hash });
+      console.log("[voteOnProjectWithTokens] Approval confirmed");
     }
 
-    const hash = await walletClient.writeContract({
-      address: contractAddress,
+    // Encode voteProject function call
+    const voteData = encodeFunctionData({
       abi: PROJECT_RANKING_TOKEN_ABI,
       functionName: "voteProject",
       args: [projectBytes32, BigInt(voteCount), isUpvote],
-      account,
     });
+
+    console.log("[voteOnProjectWithTokens] Sending vote transaction...");
+
+    // Send vote transaction using provider.request
+    const hash = await provider.request({
+      method: 'eth_sendTransaction',
+      params: [{
+        from: account,
+        to: contractAddress,
+        data: voteData,
+      }],
+    }) as Hash;
 
     console.log("[voteOnProjectWithTokens] Transaction hash:", hash);
     return hash;
   } catch (error: any) {
     console.error("[voteOnProjectWithTokens] Transaction failed:", error);
 
-    if (error.message?.includes("User rejected")) {
+    if (error.message?.includes("User rejected") || error.code === 4001) {
       throw new Error("Transaction was rejected in your wallet.");
     }
 
