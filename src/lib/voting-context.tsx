@@ -63,8 +63,11 @@ export function VotingProvider({ children }: { children: ReactNode }) {
 
   const addPendingVote = useCallback((projectId: string, projectName: string, isUpvote: boolean) => {
     setPendingVotes((prev) => {
+      // Create a new Map from the previous one
       const next = new Map(prev);
+      // Add or update the vote for this project
       next.set(projectId, { projectId, projectName, isUpvote });
+      // Return the new Map - this preserves all other pending votes
       return next;
     });
   }, []);

@@ -49,21 +49,11 @@ export function ProjectVoteButtons({
 
     const isUpvote = direction === "up";
 
-    // If clicking the same button that's already pending, remove it
-    if (pendingVote === isUpvote) {
-      removePendingVote(projectId);
-      setUserVote(null);
-      onVoteChange?.(currentVotes, null);
-      return;
-    }
-
-    // If clicking the opposite button, change the pending vote
-    // Otherwise, add new pending vote
+    // Add to pending queue
     addPendingVote(projectId, projectName, isUpvote);
     setUserVote(isUpvote);
-    onVoteChange?.(currentVotes + (isUpvote ? 1 : -1), isUpvote);
 
-    toast.success(`${isUpvote ? "Upvote" : "Downvote"} added to queue`);
+    toast(`${isUpvote ? "Upvote" : "Downvote"} added to queue`);
   }
 
   return (

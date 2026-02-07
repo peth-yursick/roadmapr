@@ -8,45 +8,21 @@ import { voteOnProjectRanking } from "@/lib/contract-client";
 import { toast } from "sonner";
 import { X, ChevronDown } from "lucide-react";
 
-const VOTE_INCREMENT = 1_000_000; // 1 vote
-const ROAD_TOKEN_ADDRESS = "0xc7aaba6e953a1c0436295cfaaaea9b3ab475eb07" as const;
-
-// ROAD token price (will be fetched from API)
-let roadPriceUsd = 0.0001; // Default fallback price
+// Simple voting - just gas cost, no tokens needed
+const ESTIMATED_GAS_COST_USD = 0.001;
 
 export function VoteConfirmationBar() {
   const { user, walletProvider } = useAuth();
   const { pendingVotes, clearPendingVotes, getTotalVotes } = useVoting();
   const [isConfirming, setIsConfirming] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [tokenPrice, setTokenPrice] = useState<number>(0);
 
   const totalPendingVotes = getTotalVotes();
-
-  // Fetch ROAD token price
-  useEffect(() => {
-    async function fetchPrice() {
-      try {
-        const res = await fetch("/api/token-price?address=" + ROAD_TOKEN_ADDRESS);
-        if (res.ok) {
-          const data = await res.json();
-          setTokenPrice(data.price || 0);
-        }
-      } catch (e) {
-        console.error("Failed to fetch token price:", e);
-      }
-    }
-    fetchPrice();
-  }, []);
 
   // No pending votes, don't show
   if (totalPendingVotes === 0) {
     return null;
   }
-
-  const totalTokens = BigInt(totalPendingVotes * VOTE_INCREMENT);
-  const estimatedUsd = totalTokens * BigInt(Math.floor((tokenPrice || 0.0001) * 1e18)) / BigInt(1e18);
-  const estimatedUsdFloat = Number(estimatedUsd) / 1e18;
 
   async function handleConfirm() {
     if (!walletProvider) {
@@ -58,35 +34,56 @@ export function VoteConfirmationBar() {
 
     try {
       // Execute all pending votes
-      const promises = Array.from(pendingVotes.values()).map(async (vote) => {
-        const txHash = await voteOnProjectRanking(
-          vote.projectId,
-          vote.isUpvote,
-          walletProvider
-        );
+      const results = await Promise.allSettled(
+        Array.from(pendingVotes.values()).map(async (vote) => {
+          try {
+            const txHash = await voteOnProjectRanking(
+              vote.projectId,
+              vote.isUpvote,
+              walletProvider
+            );
 
-        // Record in database
-        await fetch("/api/projects/vote", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            project_id: vote.projectId,
-            voter_fid: user?.fid || 0,
-            voter_address: user?.custodyAddress || null,
-            is_upvote: vote.isUpvote,
-            vote_amount: VOTE_INCREMENT,
-            tx_hash: txHash,
-          }),
-        });
+            // Record in database
+            await fetch("/api/projects/vote", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                project_id: vote.projectId,
+                voter_fid: user?.fid || 0,
+                voter_address: user?.custodyAddress || null,
+                is_upvote: vote.isUpvote,
+                vote_amount: 1,
+                tx_hash: txHash,
+              }),
+            });
 
-        return { projectId: vote.projectId, txHash };
-      });
-
-      const results = await Promise.all(promises);
-
-      toast.success(
-        `Successfully voted on ${results.length} project${results.length > 1 ? "s" : ""}!`
+            return {
+              projectId: vote.projectId,
+              success: true,
+              txHash
+            };
+          } catch (error: any) {
+            return {
+              projectId: vote.projectId,
+              success: false,
+              error: error.message
+            };
+          }
+        })
       );
+
+      const successful = results.filter(r => r.status === "fulfilled" && r.value.success);
+      const failed = results.filter(r => r.status === "rejected" || !r.value.success);
+
+      if (failed.length > 0) {
+        toast.error(
+          `${failed.length} vote${failed.length > 1 ? "s" : ""} failed. ${successful.length > 0 ? `${successful.length} succeeded.` : ""}`
+        );
+      } else {
+        toast.success(
+          `Successfully voted on ${successful.length} project${successful.length > 1 ? "s" : ""}!`
+        );
+      }
 
       // Clear pending votes
       clearPendingVotes();
@@ -116,20 +113,17 @@ export function VoteConfirmationBar() {
                 {totalPendingVotes} pending vote{totalPendingVotes > 1 ? "s" : ""}
               </div>
               <span className="text-sm text-muted-foreground">
-                Click to review & confirm
+                Review your votes before signing
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsExpanded(true)}
-                className="gap-1"
-              >
-                Review
-                <ChevronDown className="w-4 h-4" />
-              </Button>
-            </div>
+            <Button
+              size="sm"
+              onClick={() => setIsExpanded(true)}
+              className="gap-1"
+            >
+              Review
+              <ChevronDown className="w-4 h-4" />
+            </Button>
           </div>
         )}
 
@@ -155,24 +149,18 @@ export function VoteConfirmationBar() {
               </div>
             </div>
 
-            {/* Vote summary */}
+            {/* Cost summary */}
             <div className="bg-muted/50 rounded-lg p-3 space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Total votes:</span>
-                <span className="font-medium">{totalPendingVotes}</span>
-              </div>
-              <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Transaction cost:</span>
-                <span className="font-medium">Gas only (~$0.001)</span>
+                <span className="font-medium">Gas only (~${ESTIMATED_GAS_COST_USD.toFixed(3)})</span>
               </div>
-              {tokenPrice > 0 && (
-                <div className="pt-2 border-t text-xs text-muted-foreground">
-                  💡 New voting uses simple upvote/downvote - no tokens required!
-                </div>
-              )}
+              <div className="text-xs text-muted-foreground">
+                🎉 Simple voting - no tokens required! Just sign to confirm your votes.
+              </div>
             </div>
 
-            {/* Pending votes list (scrollable if many) */}
+            {/* Pending votes list */}
             <div className="max-h-40 overflow-y-auto space-y-2">
               {Array.from(pendingVotes.values()).map((vote) => (
                 <div
@@ -194,7 +182,7 @@ export function VoteConfirmationBar() {
                     size="icon"
                     className="h-6 w-6"
                     onClick={() => {
-                      /* Remove individual vote - will need to add this to context */
+                      /* Remove individual vote */
                     }}
                   >
                     <X className="w-3 h-3" />
@@ -218,7 +206,7 @@ export function VoteConfirmationBar() {
                 disabled={isConfirming || !walletProvider}
                 className="flex-1"
               >
-                {isConfirming ? "Confirming..." : "Confirm Votes"}
+                {isConfirming ? "Confirming..." : `Confirm ${totalPendingVotes} Vote${totalPendingVotes > 1 ? "s" : ""}`}
               </Button>
             </div>
 
