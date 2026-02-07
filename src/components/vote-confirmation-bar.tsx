@@ -67,40 +67,72 @@ export function VoteConfirmationBar() {
     setIsConfirming(true);
 
     try {
-      // Execute all pending votes using token-based voting
+      console.log("[VoteConfirmationBar] Processing pending votes:", pendingVotes);
+
+      // Group votes by project to batch them into single transactions
+      const votesByProject = new Map<string, { upvotes: number; downvotes: number; projectName: string }>();
+
+      for (const vote of pendingVotes) {
+        if (!votesByProject.has(vote.projectId)) {
+          votesByProject.set(vote.projectId, { upvotes: 0, downvotes: 0, projectName: vote.projectName || vote.projectId });
+        }
+        const projectVotes = votesByProject.get(vote.projectId)!;
+        if (vote.isUpvote) {
+          projectVotes.upvotes++;
+        } else {
+          projectVotes.downvotes++;
+        }
+      }
+
+      console.log("[VoteConfirmationBar] Grouped votes by project:", Object.fromEntries(votesByProject));
+
       const results = await Promise.allSettled(
-        pendingVotes.map(async (vote) => {
+        Array.from(votesByProject.entries()).map(async ([projectId, votes]) => {
           try {
+            const netVoteCount = votes.upvotes - votes.downvotes;
+            const isUpvote = netVoteCount > 0;
+            const absVoteCount = Math.abs(netVoteCount);
+
+            if (absVoteCount === 0) {
+              console.log("[VoteConfirmationBar] Skipping project with net 0 votes:", projectId);
+              return { projectId, success: true, skipped: true };
+            }
+
+            console.log("[VoteConfirmationBar] Voting on project:", { projectId, absVoteCount, isUpvote });
+
             const txHash = await voteOnProjectWithTokens(
-              vote.projectId,
-              VOTE_INCREMENT,
-              vote.isUpvote,
+              projectId,
+              absVoteCount,
+              isUpvote,
               walletProvider
             );
+
+            console.log("[VoteConfirmationBar] Transaction successful:", txHash);
 
             // Record in database
             await fetch("/api/projects/vote", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                project_id: vote.projectId,
+                project_id: projectId,
                 voter_fid: user?.fid || 0,
                 voter_address: user?.custodyAddress || null,
-                is_upvote: vote.isUpvote,
-                vote_amount: VOTE_PRICE_TOKENS,
+                is_upvote: isUpvote,
+                vote_amount: absVoteCount * VOTE_PRICE_TOKENS,
                 tx_hash: txHash,
                 token_address: ROAD_TOKEN_ADDRESS,
               }),
             });
 
             return {
-              projectId: vote.projectId,
+              projectId,
               success: true,
               txHash
             };
           } catch (error: any) {
+            console.error("[VoteConfirmationBar] Vote failed for project:", projectId, error);
             return {
-              projectId: vote.projectId,
+              projectId,
               success: false,
               error: error.message
             };
