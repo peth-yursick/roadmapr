@@ -4,25 +4,48 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { useVoting } from "@/lib/voting-context";
-import { voteOnProjectRanking } from "@/lib/contract-client";
+import { voteOnProjectWithTokens } from "@/lib/contract-client";
 import { toast } from "sonner";
 import { X, ChevronDown } from "lucide-react";
 
-// Simple voting - just gas cost, no tokens needed
-const ESTIMATED_GAS_COST_USD = 0.001;
+// Token voting configuration
+const ROAD_TOKEN_ADDRESS = "0xc7aaba6e953a1c0436295cfaaaea9b3ab475eb07" as const;
+const VOTE_INCREMENT = 1; // 1 vote per click
+const VOTE_PRICE_TOKENS = 1_000_000; // 1 million tokens per vote
+const FEE_PERCENTAGE = 0.01; // 1% fee
 
 export function VoteConfirmationBar() {
   const { user, walletProvider } = useAuth();
   const { pendingVotes, clearPendingVotes, getTotalVotes } = useVoting();
   const [isConfirming, setIsConfirming] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [roadPriceUsd, setRoadPriceUsd] = useState<number>(0.01); // Default fallback
 
   const totalPendingVotes = getTotalVotes();
+
+  // Fetch ROAD token price
+  useEffect(() => {
+    async function fetchPrice() {
+      try {
+        // Use a simple fallback price for now
+        setRoadPriceUsd(0.01);
+      } catch (e) {
+        setRoadPriceUsd(0.01);
+      }
+    }
+    fetchPrice();
+  }, []);
 
   // No pending votes, don't show
   if (totalPendingVotes === 0) {
     return null;
   }
+
+  // Calculate costs
+  const totalTokensNeeded = totalPendingVotes * VOTE_PRICE_TOKENS;
+  const feeTokens = Math.floor(totalTokensNeeded * FEE_PERCENTAGE);
+  const totalTokensWithFee = totalTokensNeeded + feeTokens;
+  const estimatedUsd = (totalTokensWithFee / 1e18) * roadPriceUsd;
 
   async function handleConfirm() {
     if (!walletProvider) {
@@ -33,12 +56,13 @@ export function VoteConfirmationBar() {
     setIsConfirming(true);
 
     try {
-      // Execute all pending votes
+      // Execute all pending votes using token-based voting
       const results = await Promise.allSettled(
         Array.from(pendingVotes.values()).map(async (vote) => {
           try {
-            const txHash = await voteOnProjectRanking(
+            const txHash = await voteOnProjectWithTokens(
               vote.projectId,
+              VOTE_INCREMENT,
               vote.isUpvote,
               walletProvider
             );
@@ -52,8 +76,9 @@ export function VoteConfirmationBar() {
                 voter_fid: user?.fid || 0,
                 voter_address: user?.custodyAddress || null,
                 is_upvote: vote.isUpvote,
-                vote_amount: 1,
+                vote_amount: VOTE_PRICE_TOKENS,
                 tx_hash: txHash,
+                token_address: ROAD_TOKEN_ADDRESS,
               }),
             });
 
@@ -109,15 +134,14 @@ export function VoteConfirmationBar() {
         {!isExpanded && (
           <div className="flex items-center justify-between px-4 py-3">
             <div className="flex items-center gap-3">
-              <div className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-medium">
+              <div className="bg-primary text-white px-3 py-1 rounded-full text-sm font-medium">
                 {totalPendingVotes} pending vote{totalPendingVotes > 1 ? "s" : ""}
               </div>
               <span className="text-sm text-muted-foreground">
-                Review your votes before signing
+                {(totalTokensWithFee / 1_000_000).toFixed(1)}M $ROAD
               </span>
             </div>
             <Button
-              size="sm"
               onClick={() => setIsExpanded(true)}
               className="gap-1"
             >
@@ -152,12 +176,27 @@ export function VoteConfirmationBar() {
             {/* Cost summary */}
             <div className="bg-muted/50 rounded-lg p-3 space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Transaction cost:</span>
-                <span className="font-medium">Gas only (~${ESTIMATED_GAS_COST_USD.toFixed(3)})</span>
+                <span className="text-muted-foreground">Total votes:</span>
+                <span className="font-medium">{totalPendingVotes}</span>
               </div>
-              <div className="text-xs text-muted-foreground">
-                🎉 Simple voting - no tokens required! Just sign to confirm your votes.
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">$ROAD tokens needed:</span>
+                <span className="font-medium">{(totalTokensWithFee / 1_000_000).toFixed(2)}M</span>
               </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Platform fee (1%):</span>
+                <span className="font-medium">{(feeTokens / 1_000_000).toFixed(4)}M</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Estimated USD:</span>
+                <span className="font-medium">${estimatedUsd.toFixed(2)}</span>
+              </div>
+              {roadPriceUsd > 0 && (
+                <div className="pt-2 border-t text-xs text-muted-foreground">
+                  @ ${(estimatedUsd / totalPendingVotes).toFixed(4)} per vote
+                  (${(roadPriceUsd * 1_000_000).toFixed(2)} $ROAD per 1M tokens)
+                </div>
+              )}
             </div>
 
             {/* Pending votes list */}

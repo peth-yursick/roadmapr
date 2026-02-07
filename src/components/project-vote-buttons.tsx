@@ -41,6 +41,11 @@ export function ProjectVoteButtons({
     }
   }, [getPendingVote, projectId]);
 
+  // Calculate display votes (current + pending if different direction)
+  const displayVotes = pendingVote !== null
+    ? (pendingVote ? currentVotes + 1 : currentVotes - 1)
+    : currentVotes;
+
   function handleVote(direction: "up" | "down") {
     if (!user) {
       toast.error("Please connect your wallet to vote");
@@ -75,8 +80,8 @@ export function ProjectVoteButtons({
           <path d="M8 4l5 6H3z" />
         </svg>
       </Button>
-      <span className="text-sm font-semibold tabular-nums" title={currentVotes.toString()}>
-        {currentVotes}
+      <span className="text-sm font-semibold tabular-nums" title={displayVotes.toString()}>
+        {displayVotes}
       </span>
       <Button
         variant="ghost"

@@ -245,8 +245,156 @@ export function createWalletClientFromProvider(provider: any) {
 }
 
 // ============================================
-// PROJECT RANKING (Simple) Functions
+// PROJECT RANKING (Token-Based) Functions
 // ============================================
+
+const PROJECT_RANKING_TOKEN_ABI = [
+  // Vote on project with tokens
+  {
+    "inputs": [
+      {"name": "projectId", "type": "bytes32"},
+      {"name": "voteCount", "type": "uint256"},
+      {"name": "isUpvote", "type": "bool"}
+    ],
+    "name": "voteProject",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  // Get project score
+  {
+    "inputs": [{"name": "projectId", "type": "bytes32"}],
+    "name": "getProjectScore",
+    "outputs": [{"name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  // Get full project votes
+  {
+    "inputs": [{"name": "projectId", "type": "bytes32"}],
+    "name": "getProjectVotes",
+    "outputs": [
+      {"name": "totalUpvotes", "type": "uint256"},
+      {"name": "totalDownvotes", "type": "uint256"},
+      {"name": "totalTokensSpent", "type": "uint256"},
+      {"name": "score", "type": "uint256"},
+      {"name": "exists", "type": "bool"}
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  // Platform fee management
+  {
+    "inputs": [{"name": "_platformFeeRecipient", "type": "address"}],
+    "name": "setPlatformFeeRecipient",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "platformFeeRecipient",
+    "outputs": [{"name": "", "type": "address"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "owner",
+    "outputs": [{"name": "", "type": "address"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{"name": "projectId", "type": "bytes32"}],
+    "name": "projectExists",
+    "outputs": [{"name": "", "type": "bool"}],
+    "stateMutability": "view",
+    "type": "function"
+  }
+] as const;
+
+export function getProjectRankingTokenAddress(): Address {
+  const address = process.env.NEXT_PUBLIC_PROJECT_RANKING_TOKEN_ADDRESS;
+  if (!address) {
+    throw new Error("NEXT_PUBLIC_PROJECT_RANKING_TOKEN_ADDRESS not set");
+  }
+  return address as Address;
+}
+
+/**
+ * Vote on a project using $ROAD tokens
+ * Users can vote multiple times by spending more tokens
+ */
+export async function voteOnProjectWithTokens(
+  projectId: string,
+  voteCount: number,
+  isUpvote: boolean,
+  provider: any
+): Promise<Hash> {
+  console.log("[voteOnProjectWithTokens] Starting vote", { projectId, voteCount, isUpvote });
+
+  if (!provider) {
+    throw new Error("Wallet provider is required");
+  }
+
+  const addresses = await provider.request({ method: 'eth_requestAccounts' });
+  const account = addresses[0] as Address;
+
+  const walletClient = createWalletClientFromProvider(provider);
+  const contractAddress = getProjectRankingTokenAddress();
+  const projectBytes32 = uuidToBytes32(projectId);
+
+  console.log("[voteOnProjectWithTokens] Contract address:", contractAddress);
+  console.log("[voteOnProjectWithTokens] Project bytes32:", projectBytes32);
+
+  try {
+    // First, approve tokens if needed
+    const ROAD_TOKEN_ADDRESS = "0xC7aABA6E953A1c0436295CFaAAeA9B3aB475EB07" as const;
+
+    // Check allowance and approve if needed
+    const currentAllowance = await (walletClient as any).readContract({
+      address: ROAD_TOKEN_ADDRESS,
+      abi: [{"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}],
+      functionName: "allowance",
+      args: [account, contractAddress],
+    });
+
+    const votePrice = 1_000_000 * 1e18; // 1 million tokens per vote
+    const requiredAllowance = BigInt(voteCount) * BigInt(votePrice);
+
+    if (currentAllowance < requiredAllowance) {
+      console.log("[voteOnProjectWithTokens] Approving tokens...");
+      const approveTx = await (walletClient as any).writeContract({
+        address: ROAD_TOKEN_ADDRESS,
+        abi: [{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"}],
+        functionName: "approve",
+        args: [contractAddress, requiredAllowance],
+        account,
+      });
+      console.log("[voteOnProjectWithTokens] Approve tx:", approveTx);
+    }
+
+    const hash = await walletClient.writeContract({
+      address: contractAddress,
+      abi: PROJECT_RANKING_TOKEN_ABI,
+      functionName: "voteProject",
+      args: [projectBytes32, BigInt(voteCount), isUpvote],
+      account,
+    });
+
+    console.log("[voteOnProjectWithTokens] Transaction hash:", hash);
+    return hash;
+  } catch (error: any) {
+    console.error("[voteOnProjectWithTokens] Transaction failed:", error);
+
+    if (error.message?.includes("User rejected")) {
+      throw new Error("Transaction was rejected in your wallet.");
+    }
+
+    throw error;
+  }
+}
 
 /**
  * Vote on a project for main page ranking
