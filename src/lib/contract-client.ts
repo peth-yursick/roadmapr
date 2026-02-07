@@ -351,6 +351,8 @@ export async function getProjectExistsOnChain(projectId: string): Promise<boolea
     const contractAddress = getContractAddress();
     const projectBytes32 = uuidToBytes32(projectId);
 
+    console.log("[getProjectExistsOnChain] Calling projects() with:", { contractAddress, projectBytes32 });
+
     const result = await publicClient.readContract({
       address: contractAddress,
       abi: ROADMAPR_VOTING_ABI,
@@ -358,20 +360,26 @@ export async function getProjectExistsOnChain(projectId: string): Promise<boolea
       args: [projectBytes32],
     });
 
-    // viem returns named outputs as an object when the ABI has output names
-    const projectData = result as {
-      tokenAddress: Address;
-      owner: Address;
-      voteIncrement: bigint;
-      totalFeesCollected: bigint;
-      totalUpvotes: bigint;
-      totalDownvotes: bigint;
-      exists: boolean;
-    };
+    console.log("[getProjectExistsOnChain] Raw result:", result);
 
-    console.log("[getProjectExistsOnChain] Project data:", { projectId, exists: projectData.exists });
+    // viem returns a tuple when there are named outputs
+    // [tokenAddress, owner, voteIncrement, totalFeesCollected, totalUpvotes, totalDownvotes, exists]
+    const projectData = result as readonly unknown[];
 
-    return projectData.exists === true;
+    // The exists flag is the last element (index 6)
+    const exists = projectData[6] === true;
+
+    console.log("[getProjectExistsOnChain] Parsed data:", {
+      projectId,
+      exists,
+      tokenAddress: projectData[0],
+      owner: projectData[1],
+      voteIncrement: projectData[2],
+      totalUpvotes: projectData[4],
+      totalDownvotes: projectData[5]
+    });
+
+    return exists;
   } catch (error: any) {
     // If we get a PositionOutOfBoundsError or other data errors, the project doesn't exist
     if (error.name === 'PositionOutOfBoundsError' || error.message?.includes('out of bounds')) {
@@ -403,15 +411,14 @@ export async function getProjectVotesOnChain(projectId: string): Promise<{
     args: [projectBytes32],
   });
 
-  // viem returns named outputs as an object when the ABI has output names
-  const votesData = result as {
-    totalUpvotes: bigint;
-    totalDownvotes: bigint;
-    totalFeesCollected: bigint;
-    score: bigint;
-  };
+  const [totalUpvotes, totalDownvotes, totalFeesCollected, score] = result as [
+    bigint,
+    bigint,
+    bigint,
+    bigint
+  ];
 
-  return votesData;
+  return { totalUpvotes, totalDownvotes, totalFeesCollected, score };
 }
 
 /**
