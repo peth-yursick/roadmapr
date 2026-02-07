@@ -361,6 +361,8 @@ export async function getProjectExistsOnChain(projectId: string): Promise<boolea
     });
 
     console.log("[getProjectExistsOnChain] Raw result:", result);
+    console.log("[getProjectExistsOnChain] Result type:", typeof result);
+    console.log("[getProjectExistsOnChain] Result keys:", Object.keys(result || {}));
 
     // viem returns a tuple when there are named outputs
     // [tokenAddress, owner, voteIncrement, totalFeesCollected, totalUpvotes, totalDownvotes, exists]
@@ -381,12 +383,22 @@ export async function getProjectExistsOnChain(projectId: string): Promise<boolea
 
     return exists;
   } catch (error: any) {
+    console.error("[getProjectExistsOnChain] Contract read error:", {
+      name: error?.name,
+      message: error?.message,
+      shortMessage: error?.shortMessage,
+      cause: error?.cause,
+      fullError: error
+    });
+
     // If we get a PositionOutOfBoundsError or other data errors, the project doesn't exist
     if (error.name === 'PositionOutOfBoundsError' || error.message?.includes('out of bounds')) {
       console.log("[getProjectExistsOnChain] Project not registered in contract:", projectId);
       return false;
     }
-    console.error("[getProjectExistsOnChain] Error checking project:", error);
+
+    // For any other error, also return false (project doesn't exist)
+    console.log("[getProjectExistsOnChain] Returning false due to error");
     return false;
   }
 }
