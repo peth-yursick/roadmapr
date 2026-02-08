@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
 
   // Get creator's address if token voting
   let creatorAddress = fee_recipient_address;
-  if (voting_type === "token" && !fee_recipient_address) {
+  if (voting_type === "token" && !fee_recipient_address && currentFid) {
     try {
       const user = await getNeynarUser(currentFid);
       // In a real implementation, we'd get their verified ETH address
