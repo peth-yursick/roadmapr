@@ -60,11 +60,8 @@ export async function GET(request: NextRequest) {
 
 // POST /api/projects - Create a new project
 export async function POST(request: NextRequest) {
+  // Get current FID if available, but allow any user to create projects
   const currentFid = await getCurrentUserFid();
-
-  if (!currentFid) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
 
   const body = await request.json();
   const {
@@ -197,20 +194,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 
-  // Add creator as owner admin
-  await supabase.from("project_admins").insert({
-    project_id: project.id,
-    fid: currentFid,
-    role: "owner",
-    added_by_fid: null,
-  });
+  // Add creator as owner admin (only if user has a FID)
+  if (currentFid) {
+    await supabase.from("project_admins").insert({
+      project_id: project.id,
+      fid: currentFid,
+      role: "owner",
+      added_by_fid: null,
+    });
 
-  // Add to authorized_markers for backward compatibility
-  await supabase.from("authorized_markers").insert({
-    project_id: project.id,
-    fid: currentFid,
-    added_by_fid: null,
-  });
+    // Add to authorized_markers for backward compatibility
+    await supabase.from("authorized_markers").insert({
+      project_id: project.id,
+      fid: currentFid,
+      added_by_fid: null,
+    });
+  }
 
   return NextResponse.json({ project }, { status: 201 });
 }
