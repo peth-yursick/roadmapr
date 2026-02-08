@@ -58,7 +58,6 @@ export function VotingProvider({ children }: { children: ReactNode }) {
           setPendingVotes([]);
         }
       } catch (e) {
-        console.error("Failed to parse pending votes:", e);
         localStorage.removeItem("pendingVotesArray");
         setPendingVotes([]);
       }
@@ -67,24 +66,17 @@ export function VotingProvider({ children }: { children: ReactNode }) {
 
   // Save to localStorage when pendingVotes changes
   useEffect(() => {
-    console.log("[VotingContext] pendingVotes changed:", pendingVotes);
     if (pendingVotes.length > 0) {
-      const toStore = JSON.stringify(pendingVotes);
-      console.log("[VotingContext] Saving to localStorage:", toStore);
-      localStorage.setItem("pendingVotesArray", toStore);
+      localStorage.setItem("pendingVotesArray", JSON.stringify(pendingVotes));
     } else {
-      console.log("[VotingContext] Removing from localStorage");
       localStorage.removeItem("pendingVotesArray");
     }
   }, [pendingVotes]);
 
   const addPendingVote = useCallback((projectId: string, projectName: string, isUpvote: boolean) => {
-    console.log("[VotingContext] addPendingVote called", { projectId, projectName, isUpvote });
     setPendingVotes((prev) => {
       // Add a new vote to the array (allows multiple votes per project)
-      const newVotes = [...prev, { projectId, projectName, isUpvote }];
-      console.log("[VotingContext] New pending votes array:", newVotes);
-      return newVotes;
+      return [...prev, { projectId, projectName, isUpvote }];
     });
   }, []);
 

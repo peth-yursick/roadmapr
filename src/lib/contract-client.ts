@@ -225,8 +225,6 @@ export function createWalletClientFromProvider(provider: any) {
     throw new Error("Provider is required");
   }
 
-  console.log("[createWalletClientFromProvider] Provider type:", typeof provider);
-  console.log("[createWalletClientFromProvider] Provider keys:", Object.keys(provider));
 
   if (typeof provider.request !== 'function' && typeof provider.requestAsync !== 'function') {
     console.error("[createWalletClientFromProvider] Invalid provider - missing request/requestAsync methods");
@@ -333,7 +331,6 @@ export async function voteOnProjectWithTokens(
   isUpvote: boolean,
   provider: any
 ): Promise<Hash> {
-  console.log("[voteOnProjectWithTokens] Starting vote", { projectId, voteCount, isUpvote });
 
   if (!provider) {
     throw new Error("Wallet provider is required");
@@ -346,9 +343,6 @@ export async function voteOnProjectWithTokens(
   const contractAddress = getProjectRankingTokenAddress();
   const projectBytes32 = uuidToBytes32(projectId);
 
-  console.log("[voteOnProjectWithTokens] Contract address:", contractAddress);
-  console.log("[voteOnProjectWithTokens] Project bytes32:", projectBytes32);
-  console.log("[voteOnProjectWithTokens] Account:", account);
 
   try {
     const ROAD_TOKEN_ADDRESS = "0xC7aABA6E953A1c0436295CFaAAeA9B3aB475EB07" as const;
@@ -372,7 +366,6 @@ export async function voteOnProjectWithTokens(
       args: [account],
     }) as bigint;
 
-    console.log("[voteOnProjectWithTokens] Token balance check:", {
       tokenBalance: tokenBalance.toString(),
       requiredTokens: (BigInt(voteCount) * votePrice).toString(),
       hasEnough: tokenBalance >= BigInt(voteCount) * votePrice
@@ -382,11 +375,9 @@ export async function voteOnProjectWithTokens(
       throw new Error(`Insufficient $ROAD token balance. You need ${(Number(voteCount) * 1_000_000).toLocaleString()} $ROAD tokens but only have ${(Number(tokenBalance) / 1e18).toLocaleString()} tokens.`);
     }
 
-    console.log("[voteOnProjectWithTokens] Allowance check:", { currentAllowance: currentAllowance.toString(), requiredAllowance: requiredAllowance.toString() });
 
     // Approve tokens if needed
     if (currentAllowance < requiredAllowance) {
-      console.log("[voteOnProjectWithTokens] Approving tokens...");
 
       // Encode approve function call
       const approveData = encodeFunctionData({
@@ -404,11 +395,9 @@ export async function voteOnProjectWithTokens(
         }],
       });
 
-      console.log("[voteOnProjectWithTokens] Approve tx hash:", approveTx);
 
       // Wait for approval transaction
       await publicClient.waitForTransactionReceipt({ hash: approveTx as Hash });
-      console.log("[voteOnProjectWithTokens] Approval confirmed");
     }
 
     // Encode voteProject function call
@@ -418,7 +407,6 @@ export async function voteOnProjectWithTokens(
       args: [projectBytes32, BigInt(voteCount), isUpvote],
     });
 
-    console.log("[voteOnProjectWithTokens] Sending vote transaction...");
 
     // Send vote transaction using provider.request
     try {
@@ -431,11 +419,9 @@ export async function voteOnProjectWithTokens(
         }],
       }) as Hash;
 
-      console.log("[voteOnProjectWithTokens] Transaction hash:", hash);
 
       // Wait for transaction to be mined and check receipt
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      console.log("[voteOnProjectWithTokens] Transaction receipt:", receipt);
 
       if (receipt.status === 'reverted') {
         throw new Error("Transaction was reverted by the smart contract. This usually means you don't have enough $ROAD tokens to complete the vote.");
@@ -478,7 +464,6 @@ export async function voteOnProjectRanking(
   isUpvote: boolean,
   provider: any
 ): Promise<Hash> {
-  console.log("[voteOnProjectRanking] Starting vote", { projectId, isUpvote });
 
   if (!provider) {
     throw new Error("Wallet provider is required");
@@ -491,8 +476,6 @@ export async function voteOnProjectRanking(
   const contractAddress = getProjectRankingAddress();
   const projectBytes32 = uuidToBytes32(projectId);
 
-  console.log("[voteOnProjectRanking] Contract address:", contractAddress);
-  console.log("[voteOnProjectRanking] Project bytes32:", projectBytes32);
 
   try {
     const hash = await walletClient.writeContract({
@@ -503,7 +486,6 @@ export async function voteOnProjectRanking(
       account,
     });
 
-    console.log("[voteOnProjectRanking] Transaction hash:", hash);
     return hash;
   } catch (error: any) {
     console.error("[voteOnProjectRanking] Transaction failed:", error);
@@ -600,7 +582,6 @@ export async function registerProjectForFeatureVoting(
   voteIncrement: number,
   provider: any
 ): Promise<Hash> {
-  console.log("[registerProjectForFeatureVoting] Registering project", { projectId, tokenAddress, voteIncrement });
 
   if (!provider) {
     throw new Error("Wallet provider is required");
@@ -613,8 +594,6 @@ export async function registerProjectForFeatureVoting(
   const contractAddress = getRoadmaprVotingAddress();
   const projectBytes32 = uuidToBytes32(projectId);
 
-  console.log("[registerProjectForFeatureVoting] Contract address:", contractAddress);
-  console.log("[registerProjectForFeatureVoting] Project bytes32:", projectBytes32);
 
   try {
     const hash = await walletClient.writeContract({
@@ -625,7 +604,6 @@ export async function registerProjectForFeatureVoting(
       account,
     });
 
-    console.log("[registerProjectForFeatureVoting] Transaction hash:", hash);
     return hash;
   } catch (error: any) {
     console.error("[registerProjectForFeatureVoting] Transaction failed:", error);
@@ -652,7 +630,6 @@ export async function voteOnFeature(
   isUpvote: boolean,
   provider: any
 ): Promise<Hash> {
-  console.log("[voteOnFeature] Starting vote", { featureId, projectId, voteCount, isUpvote });
 
   if (!provider) {
     throw new Error("Wallet provider is required");
@@ -666,7 +643,6 @@ export async function voteOnFeature(
   const featureBytes32 = uuidToBytes32(featureId);
   const projectBytes32 = uuidToBytes32(projectId);
 
-  console.log("[voteOnFeature] Contract address:", contractAddress);
 
   try {
     const hash = await walletClient.writeContract({
@@ -677,7 +653,6 @@ export async function voteOnFeature(
       account,
     });
 
-    console.log("[voteOnFeature] Transaction hash:", hash);
     return hash;
   } catch (error: any) {
     console.error("[voteOnFeature] Transaction failed:", error);

@@ -39,8 +39,6 @@ export function VoteConfirmationBar() {
     setIsConfirming(true);
 
     try {
-      console.log("[VoteConfirmationBar] Processing pending votes:", pendingVotes);
-
       // Group votes by project to batch them into single transactions
       const votesByProject = new Map<string, { upvotes: number; downvotes: number; projectName: string }>();
 
@@ -56,8 +54,6 @@ export function VoteConfirmationBar() {
         }
       }
 
-      console.log("[VoteConfirmationBar] Grouped votes by project:", Object.fromEntries(votesByProject));
-
       const results = await Promise.allSettled(
         Array.from(votesByProject.entries()).map(async ([projectId, votes]) => {
           try {
@@ -66,11 +62,8 @@ export function VoteConfirmationBar() {
             const absVoteCount = Math.abs(netVoteCount);
 
             if (absVoteCount === 0) {
-              console.log("[VoteConfirmationBar] Skipping project with net 0 votes:", projectId);
               return { projectId, success: true, skipped: true };
             }
-
-            console.log("[VoteConfirmationBar] Voting on project:", { projectId, absVoteCount, isUpvote });
 
             const txHash = await voteOnProjectWithTokens(
               projectId,
@@ -78,8 +71,6 @@ export function VoteConfirmationBar() {
               isUpvote,
               walletProvider
             );
-
-            console.log("[VoteConfirmationBar] Transaction successful:", txHash);
 
             // Record in database
             await fetch("/api/projects/vote", {
@@ -105,7 +96,6 @@ export function VoteConfirmationBar() {
               txHash
             };
           } catch (error: any) {
-            console.error("[VoteConfirmationBar] Vote failed for project:", projectId, error);
             return {
               projectId,
               success: false,
@@ -131,7 +121,6 @@ export function VoteConfirmationBar() {
       // Clear pending votes
       clearPendingVotes();
     } catch (error: any) {
-      console.error("Vote confirmation error:", error);
       toast.error(error.message || "Failed to confirm votes");
     } finally {
       setIsConfirming(false);

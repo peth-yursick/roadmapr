@@ -268,7 +268,6 @@
     widgets.forEach(widget => {
       // Elements are already upgraded by the browser
       // Just log for debugging
-      console.log('Roadmapr widget initialized:', widget.getAttribute('project-id'));
     });
   });
 })();
