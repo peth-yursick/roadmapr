@@ -7,6 +7,7 @@ import { useVoting } from "@/lib/voting-context";
 import { voteOnProjectWithTokens } from "@/lib/contract-client";
 import { toast } from "sonner";
 import { X } from "lucide-react";
+import { ROAD_TOKEN_ADDRESS, VOTE_PRICE_TOKENS, FEE_PERCENTAGE } from "@/lib/constants";
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -14,11 +15,6 @@ function getErrorMessage(error: unknown): string {
   }
   return String(error);
 }
-
-// Token voting configuration
-const ROAD_TOKEN_ADDRESS = "0xc7aaba6e953a1c0436295cfaaaea9b3ab475eb07" as const;
-const VOTE_PRICE_TOKENS = 1_000_000; // 1 million tokens per vote
-const FEE_PERCENTAGE = 0.01; // 1% fee
 
 export function VoteConfirmationBar() {
   const { user, walletProvider } = useAuth();
