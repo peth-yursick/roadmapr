@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FeatureCard } from "@/components/feature-card";
 import { useAuth } from "@/lib/auth-context";
@@ -24,6 +24,8 @@ export function FeatureFeed() {
   const [loadingMore, setLoadingMore] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  // Use ref to track cursor for pagination, avoiding dependency on features array
+  const cursorRef = useRef<string | undefined>();
 
   const fetchFeatures = useCallback(
     async (cursor?: string) => {
@@ -47,6 +49,12 @@ export function FeatureFeed() {
       const data = await fetchFeatures();
       setFeatures(data.features || []);
       setHasMore(data.hasMore);
+      // Update cursor ref
+      if (data.features && data.features.length > 0) {
+        cursorRef.current = data.features[data.features.length - 1].total_weight.toString();
+      } else {
+        cursorRef.current = undefined;
+      }
     } catch (err) {
       console.error("Failed to load features:", err);
     } finally {
@@ -59,19 +67,22 @@ export function FeatureFeed() {
   }, [loadInitial]);
 
   const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore || features.length === 0) return;
+    if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     try {
-      const lastFeature = features[features.length - 1];
-      const data = await fetchFeatures(lastFeature.total_weight.toString());
+      const data = await fetchFeatures(cursorRef.current);
       setFeatures((prev) => [...prev, ...(data.features || [])]);
       setHasMore(data.hasMore);
+      // Update cursor ref
+      if (data.features && data.features.length > 0) {
+        cursorRef.current = data.features[data.features.length - 1].total_weight.toString();
+      }
     } catch (err) {
       console.error("Failed to load more:", err);
     } finally {
       setLoadingMore(false);
     }
-  }, [loadingMore, hasMore, features, fetchFeatures]);
+  }, [loadingMore, hasMore, fetchFeatures]);
 
   // Infinite scroll observer
   useEffect(() => {
@@ -95,12 +106,13 @@ export function FeatureFeed() {
 
   const handleVoteChange = useCallback((featureId: string, newWeight: number, newUserVote: number | null) => {
     setFeatures((prev) => {
-      const updated = prev.map((f) =>
+      // Update the feature in place - no need to re-sort entire array
+      // The API returns pre-sorted data, and visual feedback is more important
+      return prev.map((f) =>
         f.id === featureId
           ? { ...f, total_weight: newWeight, user_vote: newUserVote }
           : f
       );
-      return updated.sort((a, b) => Number(b.total_weight) - Number(a.total_weight));
     });
   }, []);
 

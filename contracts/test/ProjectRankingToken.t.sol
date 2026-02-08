@@ -36,30 +36,13 @@ contract ProjectRankingTokenTest is Test {
         user1 = address(0x1);
         user2 = address(0x2);
 
-        votingContract = new ProjectRankingToken(platformFeeRecipient);
         roadToken = new MockERC20();
+        votingContract = new ProjectRankingToken(platformFeeRecipient, address(roadToken));
 
         // Mint tokens to users
         roadToken.mint(user1, 100_000_000 * 1e18);
         roadToken.mint(user2, 50_000_000 * 1e18);
         roadToken.mint(owner, 1_000_000 * 1e18);
-
-        // Mock the token contract calls to use our mock
-        address tokenAddress = address(votingContract.ROAD_TOKEN());
-
-        // Mock transferFrom to succeed
-        vm.mockCall(
-            tokenAddress,
-            abi.encodeWithSelector(TRANSFER_FROM_SELECTOR),
-            abi.encode(true)
-        );
-
-        // Mock transfer to succeed
-        vm.mockCall(
-            tokenAddress,
-            abi.encodeWithSelector(TRANSFER_SELECTOR),
-            abi.encode(true)
-        );
     }
 
     // ========== Constructor Tests ==========
@@ -76,8 +59,9 @@ contract ProjectRankingTokenTest is Test {
         assertEq(votingContract.votePrice(), VOTE_PRICE);
     }
 
-    // Note: ROAD_TOKEN is a constant in the contract, so we can't test it against mock
-    // The contract uses 0xC7aABA6E953A1c0436295CFaAAeA9B3aB475EB07
+    function test_Constructor_SetsRoadTokenCorrectly() public view {
+        assertEq(address(votingContract.ROAD_TOKEN()), address(roadToken));
+    }
 
     // ========== voteProject Tests ==========
 

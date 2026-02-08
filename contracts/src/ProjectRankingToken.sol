@@ -19,7 +19,7 @@ contract ProjectRankingToken {
     mapping(bytes32 => Project) public projects;
 
     /// @dev $ROAD token interface
-    IERC20 public constant ROAD_TOKEN = IERC20(0xC7aABA6E953A1c0436295CFaAAeA9B3aB475EB07);
+    IERC20 public ROAD_TOKEN;
 
     /// @dev Platform fee percentage (1%)
     uint256 public constant FEE_PERCENTAGE = 100; // 1% out of 10000
@@ -66,9 +66,10 @@ contract ProjectRankingToken {
 
     // ========== Constructor ==========
 
-    constructor(address _platformFeeRecipient) {
+    constructor(address _platformFeeRecipient, address _roadToken) {
         owner = msg.sender;
         platformFeeRecipient = _platformFeeRecipient;
+        ROAD_TOKEN = IERC20(_roadToken);
     }
 
     // ========== Core Functions ==========

@@ -45,23 +45,37 @@ export function VotingProvider({ children }: { children: ReactNode }) {
 
   // Load from localStorage on mount
   useEffect(() => {
-    const stored = localStorage.getItem("pendingVotesArray");
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        // If parsed data is not an array (old format), clear it
-        if (Array.isArray(parsed)) {
-          setPendingVotes(parsed);
-        } else {
-          // Old format from Map-based storage - clear it
+    const loadFromStorage = () => {
+      const stored = localStorage.getItem("pendingVotesArray");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          // If parsed data is not an array (old format), clear it
+          if (Array.isArray(parsed)) {
+            setPendingVotes(parsed);
+          } else {
+            // Old format from Map-based storage - clear it
+            localStorage.removeItem("pendingVotesArray");
+            setPendingVotes([]);
+          }
+        } catch (e) {
           localStorage.removeItem("pendingVotesArray");
           setPendingVotes([]);
         }
-      } catch (e) {
-        localStorage.removeItem("pendingVotesArray");
-        setPendingVotes([]);
       }
-    }
+    };
+
+    loadFromStorage();
+
+    // Listen for storage events from other tabs
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "pendingVotesArray") {
+        loadFromStorage();
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
   // Save to localStorage when pendingVotes changes

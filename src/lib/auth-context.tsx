@@ -6,6 +6,7 @@ import {
   useEffect,
   useState,
   ReactNode,
+  useMemo,
 } from "react";
 import sdk from "@farcaster/miniapp-sdk";
 import { usePrivy } from "@privy-io/react-auth";
@@ -38,6 +39,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthorizedMarker, setIsAuthorizedMarker] = useState(false);
   const [walletProvider, setWalletProvider] = useState<WalletProvider | null>(null);
   const { ready, authenticated, login, user: privyUser } = usePrivy();
+
+  // Memoize the privy user data we actually need to avoid unnecessary re-renders
+  const privyUserKey = useMemo(() => {
+    if (!privyUser) return null;
+    // Create a stable key based on the actual data we care about
+    const linkedAccountsKeys = privyUser.linkedAccounts
+      .map((acc) => `${acc.type}:${acc.address || acc.username || ''}`)
+      .join(',');
+    return `${privyUser.id}:${linkedAccountsKeys}:${privyUser.wallet?.address || ''}`;
+  }, [privyUser]);
 
   // Wagmi hooks for standard wallet connection
   const { address, isConnected: isWagmiConnected } = useAccount();
@@ -111,6 +122,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           };
           setUser(userData);
 
+          // Set cookie for server-side authentication
+          document.cookie = `user_fid=${farcasterAccount.fid}; path=/; max-age=604800`; // 7 days
+
           const markerFids = process.env.NEXT_PUBLIC_AUTHORIZED_MARKER_FIDS?.split(",").map(Number) || [];
           setIsAuthorizedMarker(markerFids.includes(userData.fid));
         } else {
@@ -153,6 +167,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           };
           setUser(userData);
 
+          // Set cookie for server-side authentication
+          document.cookie = `user_fid=${farcasterUser.fid}; path=/; max-age=604800`; // 7 days
+
           const markerFids = process.env.NEXT_PUBLIC_AUTHORIZED_MARKER_FIDS?.split(",").map(Number) || [];
           setIsAuthorizedMarker(markerFids.includes(userData.fid));
 
@@ -189,7 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     init();
-  }, [ready, authenticated, privyUser, isWagmiConnected, address]);
+  }, [ready, authenticated, privyUserKey, isWagmiConnected, address]);
 
   return (
     <AuthContext.Provider value={{ user, isLoading, isAuthorizedMarker, walletProvider, walletAddress: address || null, signIn, setWalletUser }}>
