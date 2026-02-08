@@ -47,8 +47,8 @@ export default async function EmbedPage({ params }: EmbedPageProps) {
 
   // Sort features by weight and filter open features
   const sortedFeatures = (project.features || [])
-    .filter((f: any) => f.status === 'open')
-    .sort((a: any, b: any) => (b.total_weight || 0) - (a.total_weight || 0))
+    .filter((f: { status: string }) => f.status === 'open')
+    .sort((a: { total_weight?: number }, b: { total_weight?: number }) => (b.total_weight || 0) - (a.total_weight || 0))
     .slice(0, 20);
 
   return (
@@ -66,7 +66,7 @@ export default async function EmbedPage({ params }: EmbedPageProps) {
             <p className="text-sm text-gray-500">No features yet</p>
           </div>
         ) : (
-          sortedFeatures.map((feature: any) => (
+          sortedFeatures.map((feature: { id: string; title: string; description?: string; total_weight?: number }) => (
             <div
               key={feature.id}
               className="bg-white rounded-lg p-3 border border-gray-200 hover:border-blue-300 transition-colors cursor-pointer"

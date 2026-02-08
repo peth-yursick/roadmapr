@@ -10,10 +10,32 @@
 import { createWalletClient, custom, encodeFunctionData, type Address, type Hash } from "viem";
 import { baseChain, uuidToBytes32, getRpcUrl, createPublicClientFn } from "./contract-utils";
 import { PROJECT_RANKING_ABI, PROJECT_RANKING_TOKEN_ABI, ROADMAPR_VOTING_ABI, ERC20_ABI } from "./contract-constants";
+import type { WalletProvider, CaughtError } from "@/types/contracts";
 
 // Re-export utilities and ABIs for convenience
 export { getRpcUrl, createPublicClientFn, baseChain, uuidToBytes32 };
 export { PROJECT_RANKING_ABI, PROJECT_RANKING_TOKEN_ABI, ROADMAPR_VOTING_ABI, ERC20_ABI };
+
+/**
+ * Type guard for error objects with message property
+ */
+function hasMessage(error: unknown): error is { message: string } {
+  return typeof error === "object" && error !== null && "message" in error;
+}
+
+/**
+ * Type guard for error objects with code property
+ */
+function hasCode(error: unknown): error is { code: number | string } {
+  return typeof error === "object" && error !== null && "code" in error;
+}
+
+/**
+ * Type guard for error objects with data property
+ */
+function hasData(error: unknown): error is { data: { message?: string } } {
+  return typeof error === "object" && error !== null && "data" in error;
+}
 
 export function getProjectRankingAddress(): Address {
   const address = process.env.NEXT_PUBLIC_PROJECT_RANKING_ADDRESS;
@@ -31,7 +53,7 @@ export function getRoadmaprVotingAddress(): Address {
   return address as Address;
 }
 
-export function createWalletClientFromProvider(provider: any) {
+export function createWalletClientFromProvider(provider: WalletProvider) {
   if (!provider) {
     throw new Error("Provider is required");
   }
@@ -74,14 +96,14 @@ export async function voteOnProjectWithTokens(
   projectId: string,
   voteCount: number,
   isUpvote: boolean,
-  provider: any
+  provider: WalletProvider
 ): Promise<Hash> {
 
   if (!provider) {
     throw new Error("Wallet provider is required");
   }
 
-  const addresses = await provider.request({ method: 'eth_requestAccounts' });
+  const addresses = await provider.request({ method: 'eth_requestAccounts' }) as string[];
   const account = addresses[0] as Address;
 
   const publicClient = createPublicClientFn();
@@ -168,26 +190,26 @@ export async function voteOnProjectWithTokens(
       }
 
       return hash;
-    } catch (txError: any) {
+    } catch (txError: unknown) {
       console.error("[voteOnProjectWithTokens] Transaction error:", txError);
 
       // Parse common error messages
-      if (txError.message?.includes("insufficient balance") || txError.message?.includes("exceeds balance")) {
+      if (hasMessage(txError) && (txError.message.includes("insufficient balance") || txError.message.includes("exceeds balance"))) {
         throw new Error("Insufficient $ROAD token balance for this transaction.");
       }
-      if (txError.message?.includes("User rejected") || txError.code === 4001) {
+      if ((hasMessage(txError) && txError.message.includes("User rejected")) || (hasCode(txError) && txError.code === 4001)) {
         throw new Error("Transaction was rejected in your wallet.");
       }
-      if (txError.data?.message) {
+      if (hasData(txError) && txError.data.message) {
         throw new Error(`Transaction failed: ${txError.data.message}`);
       }
 
       throw txError;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[voteOnProjectWithTokens] Transaction failed:", error);
 
-    if (error.message?.includes("User rejected") || error.code === 4001) {
+    if ((hasMessage(error) && error.message.includes("User rejected")) || (hasCode(error) && error.code === 4001)) {
       throw new Error("Transaction was rejected in your wallet.");
     }
 
@@ -202,14 +224,14 @@ export async function voteOnProjectWithTokens(
 export async function voteOnProjectRanking(
   projectId: string,
   isUpvote: boolean,
-  provider: any
+  provider: WalletProvider
 ): Promise<Hash> {
 
   if (!provider) {
     throw new Error("Wallet provider is required");
   }
 
-  const addresses = await provider.request({ method: 'eth_requestAccounts' });
+  const addresses = await provider.request({ method: 'eth_requestAccounts' }) as string[];
   const account = addresses[0] as Address;
 
   const walletClient = createWalletClientFromProvider(provider);
@@ -227,14 +249,14 @@ export async function voteOnProjectRanking(
     });
 
     return hash;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[voteOnProjectRanking] Transaction failed:", error);
 
-    if (error.message?.includes("User rejected")) {
+    if (hasMessage(error) && error.message.includes("User rejected")) {
       throw new Error("Transaction was rejected in your wallet.");
     }
 
-    if (error.message?.includes("Already voted")) {
+    if (hasMessage(error) && error.message.includes("Already voted")) {
       throw new Error("You have already voted on this project.");
     }
 
@@ -320,14 +342,14 @@ export async function registerProjectForFeatureVoting(
   projectId: string,
   tokenAddress: Address,
   voteIncrement: number,
-  provider: any
+  provider: WalletProvider
 ): Promise<Hash> {
 
   if (!provider) {
     throw new Error("Wallet provider is required");
   }
 
-  const addresses = await provider.request({ method: 'eth_requestAccounts' });
+  const addresses = await provider.request({ method: 'eth_requestAccounts' }) as string[];
   const account = addresses[0] as Address;
 
   const walletClient = createWalletClientFromProvider(provider);
@@ -345,14 +367,14 @@ export async function registerProjectForFeatureVoting(
     });
 
     return hash;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[registerProjectForFeatureVoting] Transaction failed:", error);
 
-    if (error.message?.includes("User rejected")) {
+    if (hasMessage(error) && error.message.includes("User rejected")) {
       throw new Error("Transaction was rejected in your wallet.");
     }
 
-    if (error.message?.includes("Project already exists")) {
+    if (hasMessage(error) && error.message.includes("Project already exists")) {
       throw new Error("This project is already registered for feature voting.");
     }
 
@@ -368,14 +390,14 @@ export async function voteOnFeature(
   projectId: string,
   voteCount: bigint,
   isUpvote: boolean,
-  provider: any
+  provider: WalletProvider
 ): Promise<Hash> {
 
   if (!provider) {
     throw new Error("Wallet provider is required");
   }
 
-  const addresses = await provider.request({ method: 'eth_requestAccounts' });
+  const addresses = await provider.request({ method: 'eth_requestAccounts' }) as string[];
   const account = addresses[0] as Address;
 
   const walletClient = createWalletClientFromProvider(provider);
@@ -394,10 +416,10 @@ export async function voteOnFeature(
     });
 
     return hash;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[voteOnFeature] Transaction failed:", error);
 
-    if (error.message?.includes("User rejected")) {
+    if (hasMessage(error) && error.message.includes("User rejected")) {
       throw new Error("Transaction was rejected in your wallet.");
     }
 
@@ -425,7 +447,7 @@ export async function isProjectRegisteredForFeatureVoting(projectId: string): Pr
     const exists = projectData[4] === true;
 
     return exists;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[isProjectRegisteredForFeatureVoting] Error:", error);
     return false;
   }
@@ -440,9 +462,9 @@ export async function isProjectRegisteredForFeatureVoting(projectId: string): Pr
  */
 export async function withdrawPlatformFeesWithWallet(
   projectId: string,
-  provider: any
+  provider: WalletProvider
 ): Promise<Hash> {
-  const addresses = await provider.request({ method: 'eth_requestAccounts' });
+  const addresses = await provider.request({ method: 'eth_requestAccounts' }) as string[];
   const account = addresses[0] as Address;
 
   const walletClient = createWalletClientFromProvider(provider);
@@ -493,9 +515,9 @@ export async function getPlatformFeeRecipient(): Promise<Address> {
 
 export async function setPlatformFeeRecipientWithWallet(
   newRecipient: Address,
-  provider: any
+  provider: WalletProvider
 ): Promise<Hash> {
-  const addresses = await provider.request({ method: 'eth_requestAccounts' });
+  const addresses = await provider.request({ method: 'eth_requestAccounts' }) as string[];
   const account = addresses[0] as Address;
 
   const walletClient = createWalletClientFromProvider(provider);

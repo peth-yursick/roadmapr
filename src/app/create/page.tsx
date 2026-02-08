@@ -109,8 +109,9 @@ export default function CreateProjectPage() {
       }
 
       router.push(`/projects/${projectHandle}`);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setError(message);
       setLoading(false);
       setRegistering(false);
     }

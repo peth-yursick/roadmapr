@@ -74,8 +74,9 @@ export async function POST() {
           added_by_fid: null,
         });
       }
-    } catch (err: any) {
-      results.push({ project: project.name, added: false, error: err.message });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      results.push({ project: project.name, added: false, error: message });
     }
   }
 

@@ -68,8 +68,9 @@ export default function RegisterProjectPage() {
 
       // Clear form
       setProjectId("");
-    } catch (err: any) {
-      setError(err.message || "Failed to register project");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to register project";
+      setError(message);
     } finally {
       setLoading(false);
     }

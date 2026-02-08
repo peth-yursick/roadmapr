@@ -1,5 +1,6 @@
 import { registerProjectForFeatureVoting, uuidToBytes32 } from "./contract-client";
 import { useAuth } from "./auth-context";
+import type { WalletProvider } from "@/types/contracts";
 
 /**
  * Register a project for feature voting in the smart contract
@@ -10,7 +11,7 @@ import { useAuth } from "./auth-context";
  */
 export async function registerProjectInContract(
   projectId: string,
-  provider: any
+  provider: WalletProvider
 ): Promise<{ success: boolean; error?: string; txHash?: string }> {
   // $ROAD token on Base
   const ROAD_TOKEN_ADDRESS = "0xc7aaba6e953a1c0436295cfaaaea9b3ab475eb07" as const;
@@ -41,11 +42,12 @@ export async function registerProjectInContract(
     }
 
     return { success: true, txHash };
-  } catch (error: any) {
-    console.error("[registerProjectInContract] Failed:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("[registerProjectInContract] Failed:", message);
     return {
       success: false,
-      error: error.message || "Failed to register project in smart contract"
+      error: message || "Failed to register project in smart contract"
     };
   }
 }

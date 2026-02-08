@@ -8,6 +8,13 @@ import { voteOnProjectWithTokens } from "@/lib/contract-client";
 import { toast } from "sonner";
 import { X } from "lucide-react";
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
 // Token voting configuration
 const ROAD_TOKEN_ADDRESS = "0xc7aaba6e953a1c0436295cfaaaea9b3ab475eb07" as const;
 const VOTE_PRICE_TOKENS = 1_000_000; // 1 million tokens per vote
@@ -95,11 +102,11 @@ export function VoteConfirmationBar() {
               success: true,
               txHash
             };
-          } catch (error: any) {
+          } catch (error: unknown) {
             return {
               projectId,
               success: false,
-              error: error.message
+              error: getErrorMessage(error)
             };
           }
         })
@@ -120,8 +127,8 @@ export function VoteConfirmationBar() {
 
       // Clear pending votes
       clearPendingVotes();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to confirm votes");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error) || "Failed to confirm votes");
     } finally {
       setIsConfirming(false);
     }

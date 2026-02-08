@@ -10,20 +10,13 @@ import {
 import sdk from "@farcaster/miniapp-sdk";
 import { usePrivy } from "@privy-io/react-auth";
 import { useAccount, useConnectorClient } from "wagmi";
-
-interface User {
-  fid: number;
-  username: string;
-  displayName: string;
-  pfpUrl: string;
-  custodyAddress?: string;
-}
+import type { UserInfo, WalletProvider } from "@/types/contracts";
 
 interface AuthContextType {
-  user: User | null;
+  user: UserInfo | null;
   isLoading: boolean;
   isAuthorizedMarker: boolean;
-  walletProvider: any;
+  walletProvider: WalletProvider | null;
   walletAddress: string | null;
   signIn: () => Promise<void>;
   setWalletUser: (address: string) => void;
@@ -36,14 +29,14 @@ const AuthContext = createContext<AuthContextType>({
   walletProvider: null,
   walletAddress: null,
   signIn: async () => {},
-  setWalletUser: async () => {},
+  setWalletUser: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<UserInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthorizedMarker, setIsAuthorizedMarker] = useState(false);
-  const [walletProvider, setWalletProvider] = useState<any>(null);
+  const [walletProvider, setWalletProvider] = useState<WalletProvider | null>(null);
   const { ready, authenticated, login, user: privyUser } = usePrivy();
 
   // Wagmi hooks for standard wallet connection
@@ -54,8 +47,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async () => {
     try {
       await login();
-    } catch (error: any) {
-      console.error("[Auth] Sign-in error:", error);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      console.error("[Auth] Sign-in error:", message);
       throw error;
     }
   };
@@ -65,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Set cookie for server-side authentication
     document.cookie = `wallet_address=${walletAddress}; path=/; max-age=604800`; // 7 days
 
-    const userData: User = {
+    const userData: UserInfo = {
       fid: 0, // No FID for wallet-only users
       username: walletAddress.slice(0, 8),
       displayName: walletAddress.slice(0, 8),
@@ -79,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Update wallet provider when wagmi client changes
   useEffect(() => {
     if (wagmiWalletClient && isWagmiConnected && address) {
-      setWalletProvider(wagmiWalletClient);
+      setWalletProvider(wagmiWalletClient as unknown as WalletProvider);
       setWalletUser(address);
     }
   }, [wagmiWalletClient, isWagmiConnected, address]);
@@ -103,17 +97,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (authenticated && privyUser) {
         // Extract Farcaster account from Privy user
         const farcasterAccount = privyUser.linkedAccounts.find(
-          (account: any) => account.type === "farcaster"
-        );
+          (account) => account.type === "farcaster"
+        ) as { type: "farcaster"; fid: number; username?: string; displayName?: string; pfpUrl?: string } | undefined;
 
         // Set user data - prefer Farcaster account if available, otherwise use email/wallet
         if (farcasterAccount) {
-          const fc = farcasterAccount as any;
-          const userData: User = {
-            fid: fc.fid,
-            username: fc.username || `fid:${fc.fid}`,
-            displayName: fc.displayName || fc.username || `fid:${fc.fid}`,
-            pfpUrl: fc.pfpUrl || "",
+          const userData: UserInfo = {
+            fid: farcasterAccount.fid,
+            username: farcasterAccount.username || `fid:${farcasterAccount.fid}`,
+            displayName: farcasterAccount.displayName || farcasterAccount.username || `fid:${farcasterAccount.fid}`,
+            pfpUrl: farcasterAccount.pfpUrl || "",
             custodyAddress: privyUser.wallet?.address,
           };
           setUser(userData);
@@ -123,13 +116,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           // Web-only login (email/wallet) - create user without Farcaster
           const emailAccount = privyUser.linkedAccounts.find(
-            (account: any) => account.type === "email"
-          ) as any;
+            (account) => account.type === "email"
+          ) as { type: "email"; address: string } | undefined;
           const walletAccount = privyUser.linkedAccounts.find(
-            (account: any) => account.type === "wallet"
-          ) as any;
+            (account) => account.type === "wallet"
+          ) as { type: "wallet"; address: string } | undefined;
 
-          const userData: User = {
+          const userData: UserInfo = {
             fid: 0, // No FID for web-only users
             username: emailAccount?.address || walletAccount?.address?.slice(0, 8) || "web-user",
             displayName: emailAccount?.address || walletAccount?.address?.slice(0, 8) || "Web User",
@@ -152,7 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (context?.user) {
           const farcasterUser = context.user;
-          const userData: User = {
+          const userData: UserInfo = {
             fid: farcasterUser.fid,
             username: farcasterUser.username || `fid:${farcasterUser.fid}`,
             displayName: farcasterUser.displayName || farcasterUser.username || `fid:${farcasterUser.fid}`,
@@ -166,7 +159,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Get wallet provider
           try {
             const provider = await sdk.wallet.getEthereumProvider();
-            setWalletProvider(provider);
+            if (provider) {
+              setWalletProvider(provider as unknown as WalletProvider);
+            }
           } catch (walletError) {
             console.error("Failed to get wallet provider:", walletError);
           }
@@ -181,7 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Not in Farcaster context - use mock user in development
       if (process.env.NODE_ENV === "development") {
-        const mockUser: User = {
+        const mockUser: UserInfo = {
           fid: 1,
           username: "dev-user",
           displayName: "Dev User",

@@ -51,10 +51,11 @@ export async function POST(request: NextRequest) {
         voteIncrementUsd: VOTE_INCREMENT_USD,
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to verify project";
     console.error("[Register-Any] Error:", err);
     return NextResponse.json(
-      { error: err.message || "Failed to verify project" },
+      { error: message },
       { status: 500 }
     );
   }

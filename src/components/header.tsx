@@ -97,9 +97,9 @@ export function Header() {
     setIsSigningIn(true);
     try {
       await signIn();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Sign-in failed:", err);
-      const errorMsg = err?.message || err?.toString() || "Unknown error";
+      const errorMsg = err instanceof Error ? err.message : "Unknown error";
       alert(`Sign-in failed: ${errorMsg}\n\nTry connecting your wallet instead.`);
     } finally {
       setIsSigningIn(false);

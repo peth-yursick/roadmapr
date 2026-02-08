@@ -80,9 +80,10 @@ export async function POST(request: NextRequest) {
         voteIncrement,
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to register project";
     return NextResponse.json(
-      { error: err.message || "Failed to register project" },
+      { error: message },
       { status: 500 }
     );
   }
