@@ -3,6 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 
 export const runtime = 'edge';
 
+// Authorized admin FIDs from environment
+const AUTHORIZED_MARKER_FIDS = process.env.NEXT_PUBLIC_AUTHORIZED_MARKER_FIDS
+  ? process.env.NEXT_PUBLIC_AUTHORIZED_MARKER_FIDS.split(",").map(Number)
+  : [];
+
 /**
  * Admin endpoint to register any project in the smart contract
  * This is useful for registering official projects like Farcaster
@@ -10,10 +15,22 @@ export const runtime = 'edge';
  * POST /api/admin/register-project
  * Body: { projectHandle, tokenAddress, voteIncrement, privateKey }
  *
- * SECURITY: In production, this should be protected with proper authentication
+ * SECURITY: Protected by NEXT_PUBLIC_AUTHORIZED_MARKER_FIDS
  */
 export async function POST(request: NextRequest) {
   try {
+    // Get user FID from headers (set by middleware/auth.ts if present)
+    const userFid = request.headers.get("x-user-fid");
+    const fid = userFid ? parseInt(userFid, 10) : null;
+
+    // Check authorization
+    if (!fid || !AUTHORIZED_MARKER_FIDS.includes(fid)) {
+      return NextResponse.json(
+        { error: "Unauthorized. Admin access required." },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { projectHandle, tokenAddress, voteIncrement } = body;
 
@@ -53,11 +70,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
 
-    // Note: The actual smart contract registration needs to be done separately
-    // with a wallet. This endpoint just marks the project as ready for token voting.
-    // For the actual on-chain registration, we would need a server wallet with
-    // private key access, which should be handled securely.
-
     return NextResponse.json({
       success: true,
       project: {
@@ -67,10 +79,8 @@ export async function POST(request: NextRequest) {
         tokenAddress,
         voteIncrement,
       },
-      message: "Project updated with token voting configuration. Note: Smart contract registration requires a wallet transaction.",
     });
   } catch (err: any) {
-    console.error("[Admin Register] Error:", err);
     return NextResponse.json(
       { error: err.message || "Failed to register project" },
       { status: 500 }
