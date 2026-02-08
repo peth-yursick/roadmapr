@@ -1,32 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getAdminFromHeader, isAuthorizedMarker } from "@/lib/auth-tokens";
 
 export const runtime = 'edge';
-
-// Authorized admin FIDs from environment
-const AUTHORIZED_MARKER_FIDS = process.env.NEXT_PUBLIC_AUTHORIZED_MARKER_FIDS
-  ? process.env.NEXT_PUBLIC_AUTHORIZED_MARKER_FIDS.split(",").map(Number)
-  : [];
 
 /**
  * Admin endpoint to register any project in the smart contract
  * This is useful for registering official projects like Farcaster
  *
  * POST /api/admin/register-project
- * Body: { projectHandle, tokenAddress, voteIncrement, privateKey }
+ * Body: { projectHandle, tokenAddress, voteIncrement }
+ * Headers: Authorization: Bearer <admin_jwt_token>
  *
- * SECURITY: Protected by NEXT_PUBLIC_AUTHORIZED_MARKER_FIDS
+ * SECURITY: Protected by JWT token - call /api/admin/generate-token first
  */
 export async function POST(request: NextRequest) {
   try {
-    // Get user FID from headers (set by middleware/auth.ts if present)
-    const userFid = request.headers.get("x-user-fid");
-    const fid = userFid ? parseInt(userFid, 10) : null;
+    // Verify admin JWT token from Authorization header
+    const authHeader = request.headers.get("authorization");
+    const admin = await getAdminFromHeader(authHeader);
 
-    // Check authorization
-    if (!fid || !AUTHORIZED_MARKER_FIDS.includes(fid)) {
+    if (!admin || !admin.isAdmin) {
       return NextResponse.json(
-        { error: "Unauthorized. Admin access required." },
+        { error: "Unauthorized. Admin access required. Include valid JWT token in Authorization header." },
+        { status: 401 }
+      );
+    }
+
+    // Double-check FID authorization as defense in depth
+    if (!isAuthorizedMarker(admin.fid)) {
+      return NextResponse.json(
+        { error: "Forbidden. Your account is not authorized for admin operations." },
         { status: 403 }
       );
     }

@@ -1,13 +1,35 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getAdminFromHeader, isAuthorizedMarker } from "@/lib/auth-tokens";
 
 export const runtime = 'edge';
 
 /**
  * Admin endpoint to add missing admins to projects
  * This ensures all project creators are in the project_admins table
+ *
+ * POST /api/admin/add-project-admins
+ * Headers: Authorization: Bearer <admin_jwt_token>
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
+  // Verify admin JWT token
+  const authHeader = request.headers.get("authorization");
+  const admin = await getAdminFromHeader(authHeader);
+
+  if (!admin || !admin.isAdmin) {
+    return NextResponse.json(
+      { error: "Unauthorized. Admin access required." },
+      { status: 401 }
+    );
+  }
+
+  // Double-check FID authorization
+  if (!isAuthorizedMarker(admin.fid)) {
+    return NextResponse.json(
+      { error: "Forbidden. Your account is not authorized for admin operations." },
+      { status: 403 }
+    );
+  }
   const supabase = await createClient();
 
   // Get all projects
