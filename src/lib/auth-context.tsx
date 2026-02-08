@@ -45,7 +45,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!privyUser) return null;
     // Create a stable key based on the actual data we care about
     const linkedAccountsKeys = privyUser.linkedAccounts
-      .map((acc) => `${acc.type}:${acc.address || acc.username || ''}`)
+      .map((acc) => {
+        // Type guard for wallet accounts
+        if (acc.type === 'wallet') {
+          return `${acc.type}:${(acc as any).address || ''}`;
+        }
+        // Type guard for email accounts
+        if (acc.type === 'email') {
+          return `${acc.type}:${(acc as any).address || ''}`;
+        }
+        // Type guard for Farcaster accounts
+        if (acc.type === 'farcaster') {
+          return `${acc.type}:${(acc as any).username || ''}`;
+        }
+        return `${acc.type}:`;
+      })
       .join(',');
     return `${privyUser.id}:${linkedAccountsKeys}:${privyUser.wallet?.address || ''}`;
   }, [privyUser]);
