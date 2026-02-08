@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { formatWeight } from "@/lib/format";
 import { toast } from "sonner";
+import { ChevronUp, ChevronDown } from "lucide-react";
 
 interface VoteButtonsProps {
   featureId: string;
@@ -78,9 +79,7 @@ export function VoteButtons({
           disabled={isVoting}
           aria-label="Upvote"
         >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M8 4l5 6H3z" />
-          </svg>
+          <ChevronUp className="w-3 h-3" />
         </Button>
         <span
           className="text-xs font-semibold tabular-nums min-w-[2rem] text-center"
@@ -96,9 +95,7 @@ export function VoteButtons({
           disabled={isVoting}
           aria-label="Downvote"
         >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M8 12l5-6H3z" />
-          </svg>
+          <ChevronDown className="w-3 h-3" />
         </Button>
       </div>
     );
@@ -114,9 +111,7 @@ export function VoteButtons({
         disabled={isVoting}
         aria-label="Upvote"
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8 4l5 6H3z" />
-        </svg>
+        <ChevronUp className="w-3.5 h-3.5" />
       </Button>
       <span
         className="text-sm font-semibold tabular-nums"
@@ -132,9 +127,7 @@ export function VoteButtons({
         disabled={isVoting}
         aria-label="Downvote"
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8 12l5-6H3z" />
-        </svg>
+        <ChevronDown className="w-3.5 h-3.5" />
       </Button>
     </div>
   );

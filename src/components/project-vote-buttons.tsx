@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { useVoting } from "@/lib/voting-context";
 import { toast } from "sonner";
+import { ChevronUp, ChevronDown } from "lucide-react";
 
 interface ProjectVoteButtonsProps {
   projectId: string;
@@ -61,9 +62,7 @@ export function ProjectVoteButtons({
         onClick={() => handleVote("up")}
         aria-label="Upvote"
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8 4l5 6H3z" />
-        </svg>
+        <ChevronUp className="w-3.5 h-3.5" />
       </Button>
       <span className="text-sm font-semibold tabular-nums" title={displayVotes.toString()}>
         {displayVotes}
@@ -81,9 +80,7 @@ export function ProjectVoteButtons({
         onClick={() => handleVote("down")}
         aria-label="Downvote"
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8 12l5-6H3z" />
-        </svg>
+        <ChevronDown className="w-3.5 h-3.5" />
       </Button>
     </div>
   );
