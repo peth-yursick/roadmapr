@@ -17,24 +17,31 @@ export interface PendingVote {
 
 interface VotingContextType {
   pendingVotes: PendingVote[];
+  confirmedVotes: Map<string, number>; // Track confirmed vote deltas per project
   addPendingVote: (projectId: string, projectName: string, isUpvote: boolean) => void;
   removePendingVote: (projectId: string, isUpvote: boolean) => void;
   getPendingVotesForProject: (projectId: string) => PendingVote[];
   getTotalVotes: () => number;
   clearPendingVotes: () => void;
+  markVotesAsConfirmed: (projectId: string, voteDelta: number) => void;
+  getConfirmedVoteDelta: (projectId: string) => number;
 }
 
 const VotingContext = createContext<VotingContextType>({
   pendingVotes: [],
+  confirmedVotes: new Map(),
   addPendingVote: () => {},
   removePendingVote: () => {},
   getPendingVotesForProject: () => [],
   getTotalVotes: () => 0,
   clearPendingVotes: () => {},
+  markVotesAsConfirmed: () => {},
+  getConfirmedVoteDelta: () => 0,
 });
 
 export function VotingProvider({ children }: { children: ReactNode }) {
   const [pendingVotes, setPendingVotes] = useState<PendingVote[]>([]);
+  const [confirmedVotes, setConfirmedVotes] = useState<Map<string, number>>(new Map());
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -107,15 +114,30 @@ export function VotingProvider({ children }: { children: ReactNode }) {
     return pendingVotes.length;
   }, [pendingVotes.length]);
 
+  const markVotesAsConfirmed = useCallback((projectId: string, voteDelta: number) => {
+    setConfirmedVotes((prev) => {
+      const newMap = new Map(prev);
+      newMap.set(projectId, (prev.get(projectId) || 0) + voteDelta);
+      return newMap;
+    });
+  }, []);
+
+  const getConfirmedVoteDelta = useCallback((projectId: string): number => {
+    return confirmedVotes.get(projectId) || 0;
+  }, [confirmedVotes]);
+
   return (
     <VotingContext.Provider
       value={{
         pendingVotes,
+        confirmedVotes,
         addPendingVote,
         removePendingVote,
         getPendingVotesForProject,
         getTotalVotes,
         clearPendingVotes,
+        markVotesAsConfirmed,
+        getConfirmedVoteDelta,
       }}
     >
       {children}

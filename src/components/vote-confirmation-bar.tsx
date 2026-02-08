@@ -1,47 +1,24 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { useVoting } from "@/lib/voting-context";
 import { voteOnProjectWithTokens } from "@/lib/contract-client";
 import { toast } from "sonner";
-import { X, ChevronDown } from "lucide-react";
+import { X } from "lucide-react";
 
 // Token voting configuration
 const ROAD_TOKEN_ADDRESS = "0xc7aaba6e953a1c0436295cfaaaea9b3ab475eb07" as const;
-const VOTE_INCREMENT = 1; // 1 vote per click
 const VOTE_PRICE_TOKENS = 1_000_000; // 1 million tokens per vote
 const FEE_PERCENTAGE = 0.01; // 1% fee
 
 export function VoteConfirmationBar() {
   const { user, walletProvider } = useAuth();
-  const { pendingVotes, clearPendingVotes, getTotalVotes } = useVoting();
+  const { pendingVotes, clearPendingVotes, getTotalVotes, markVotesAsConfirmed } = useVoting();
   const [isConfirming, setIsConfirming] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [roadPriceUsd, setRoadPriceUsd] = useState<number>(0.01); // Default fallback
 
   const totalPendingVotes = getTotalVotes();
-
-  // Fetch ROAD token price
-  useEffect(() => {
-    async function fetchPrice() {
-      try {
-        // Try to fetch real price from CoinGecko
-        const response = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=roadmap&vs_currencies=usd");
-        if (response.ok) {
-          const data = await response.json();
-          const price = data.roadmap?.usd || 0.000001; // Fallback to very small price
-          setRoadPriceUsd(price);
-        } else {
-          setRoadPriceUsd(0.000001); // Very small fallback
-        }
-      } catch (e) {
-        setRoadPriceUsd(0.000001); // Very small fallback
-      }
-    }
-    fetchPrice();
-  }, []);
 
   // No pending votes, don't show
   if (totalPendingVotes === 0) {
@@ -52,18 +29,6 @@ export function VoteConfirmationBar() {
   const totalTokensNeeded = totalPendingVotes * VOTE_PRICE_TOKENS;
   const feeTokens = Math.floor(totalTokensNeeded * FEE_PERCENTAGE);
   const totalTokensWithFee = totalTokensNeeded + feeTokens;
-  // totalTokensWithFee is in token units (1M tokens per vote), not wei
-  const estimatedUsd = (totalTokensWithFee / 1_000_000) * roadPriceUsd;
-
-  console.log("[VoteConfirmationBar] Cost calculation:", {
-    totalPendingVotes,
-    totalTokensNeeded,
-    feeTokens,
-    totalTokensWithFee,
-    roadPriceUsd,
-    estimatedUsd,
-    pendingVotes,
-  });
 
   async function handleConfirm() {
     if (!walletProvider) {
@@ -131,6 +96,9 @@ export function VoteConfirmationBar() {
               }),
             });
 
+            // Mark votes as confirmed in the context so UI doesn't reset
+            markVotesAsConfirmed(projectId, isUpvote ? absVoteCount : -absVoteCount);
+
             return {
               projectId,
               success: true,
@@ -162,7 +130,6 @@ export function VoteConfirmationBar() {
 
       // Clear pending votes
       clearPendingVotes();
-      setIsExpanded(false);
     } catch (error: any) {
       console.error("Vote confirmation error:", error);
       toast.error(error.message || "Failed to confirm votes");
@@ -173,131 +140,52 @@ export function VoteConfirmationBar() {
 
   function handleClear() {
     clearPendingVotes();
-    setIsExpanded(false);
     toast.info("Pending votes cleared");
   }
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-background border-t shadow-lg z-50">
-      <div className="max-w-4xl mx-auto">
-        {/* Collapsed state */}
-        {!isExpanded && (
-          <div className="flex items-center justify-between px-4 py-3">
-            <div className="flex items-center gap-3">
-              <div className="bg-primary text-white px-3 py-1 rounded-full text-sm font-medium">
-                {totalPendingVotes} pending vote{totalPendingVotes > 1 ? "s" : ""}
-              </div>
-              <span className="text-sm text-muted-foreground">
-                {(totalTokensWithFee / 1_000_000).toFixed(1)}M $ROAD
-              </span>
+      <div className="max-w-4xl mx-auto px-4 py-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-primary text-white px-3 py-1 rounded-full text-sm font-medium">
+              {totalPendingVotes} pending vote{totalPendingVotes > 1 ? "s" : ""}
             </div>
+            <span className="text-sm text-muted-foreground">
+              {(totalTokensWithFee / 1_000_000).toFixed(1)}M $ROAD
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
             <Button
-              onClick={() => setIsExpanded(true)}
-              className="gap-1"
+              variant="outline"
+              size="sm"
+              onClick={handleClear}
+              disabled={isConfirming}
             >
-              Review
-              <ChevronDown className="w-4 h-4" />
+              Clear
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleConfirm}
+              disabled={isConfirming || !walletProvider}
+            >
+              {isConfirming ? "Confirming..." : "Confirm"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={handleClear}
+            >
+              <X className="w-3 h-3" />
             </Button>
           </div>
-        )}
+        </div>
 
-        {/* Expanded state */}
-        {isExpanded && (
-          <div className="px-4 py-4 space-y-4">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-semibold">Confirm Your Votes</h3>
-                <p className="text-sm text-muted-foreground">
-                  {totalPendingVotes} project{totalPendingVotes > 1 ? "s" : ""} to vote on
-                </p>
-              </div>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setIsExpanded(false)}
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-
-            {/* Cost summary */}
-            <div className="bg-muted/50 rounded-lg p-3 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Total votes:</span>
-                <span className="font-medium">{totalPendingVotes}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">$ROAD tokens needed:</span>
-                <span className="font-medium">{(totalTokensWithFee / 1_000_000).toFixed(2)}M</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Platform fee (1%):</span>
-                <span className="font-medium">{(feeTokens / 1_000_000).toFixed(4)}M</span>
-              </div>
-              <div className="pt-2 border-t text-xs text-muted-foreground">
-                Each vote costs 1,000,000 $ROAD tokens
-              </div>
-            </div>
-
-            {/* Pending votes list */}
-            <div className="max-h-40 overflow-y-auto space-y-2">
-              {pendingVotes.map((vote, index) => (
-                <div
-                  key={`${vote.projectId}-${index}`}
-                  className="flex items-center justify-between text-sm p-2 bg-background rounded border"
-                >
-                  <div className="flex items-center gap-2">
-                    {vote.isUpvote ? (
-                      <span className="text-primary">▲</span>
-                    ) : (
-                      <span className="text-destructive">▼</span>
-                    )}
-                    <span className="truncate max-w-[200px]">
-                      {vote.projectName || vote.projectId.slice(0, 8)}
-                    </span>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={() => {
-                      /* Remove individual vote */
-                    }}
-                  >
-                    <X className="w-3 h-3" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-
-            {/* Action buttons */}
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={handleClear}
-                disabled={isConfirming}
-                className="flex-1"
-              >
-                Clear All
-              </Button>
-              <Button
-                onClick={handleConfirm}
-                disabled={isConfirming || !walletProvider}
-                className="flex-1"
-              >
-                {isConfirming ? "Confirming..." : `Confirm ${totalPendingVotes} Vote${totalPendingVotes > 1 ? "s" : ""}`}
-              </Button>
-            </div>
-
-            {!walletProvider && (
-              <p className="text-xs text-center text-muted-foreground">
-                Connect your wallet to confirm these votes
-              </p>
-            )}
-          </div>
+        {!walletProvider && (
+          <p className="text-xs text-center text-muted-foreground mt-2">
+            Connect your wallet to confirm these votes
+          </p>
         )}
       </div>
     </div>

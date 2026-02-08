@@ -20,9 +20,10 @@ export function ProjectVoteButtons({
   onVoteChange,
 }: ProjectVoteButtonsProps) {
   const { user } = useAuth();
-  const { addPendingVote, getPendingVotesForProject } = useVoting();
+  const { addPendingVote, getPendingVotesForProject, getConfirmedVoteDelta } = useVoting();
 
   const [currentVotes, setCurrentVotes] = useState(totalVotes);
+  const confirmedDelta = getConfirmedVoteDelta(projectId);
 
   // Get pending votes for this project
   const pendingVotesForProject = getPendingVotesForProject(projectId);
@@ -30,8 +31,8 @@ export function ProjectVoteButtons({
   const pendingDownvotes = pendingVotesForProject.filter(v => !v.isUpvote).length;
   const netPendingVotes = pendingUpvotes - pendingDownvotes;
 
-  // Display votes = current + pending
-  const displayVotes = currentVotes + netPendingVotes;
+  // Display votes = current + confirmed + pending
+  const displayVotes = currentVotes + confirmedDelta + netPendingVotes;
 
   function handleVote(direction: "up" | "down") {
     if (!user) {
@@ -41,10 +42,8 @@ export function ProjectVoteButtons({
 
     const isUpvote = direction === "up";
 
-    // Add to pending queue
+    // Add to pending queue (no toast notification)
     addPendingVote(projectId, projectName, isUpvote);
-
-    toast(`${isUpvote ? "Upvote" : "Downvote"} added to queue`);
   }
 
   return (
