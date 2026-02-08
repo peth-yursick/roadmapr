@@ -42,6 +42,7 @@ export const metadata: Metadata = {
       splashImageUrl: "https://roadmapr-ten.vercel.app/splash.png",
       splashBackgroundColor: "#101010",
     }),
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.vercel.app https://imagedelivery.net https://*.imagedelivery.net; connect-src 'self' https://farcaster.xyz https://client.farcaster.xyz https://warpcast.com https://client.warpcast.com https://wrpcd.net https://*.wrpcd.net https://privy.farcaster.xyz https://privy.warpcast.com https://auth.privy.io https://*.rpc.privy.systems https://cloudflareinsights.com https://explorer-api.walletconnect.com https://*.walletconnect.com https://*.walletconnect.org https://mainnet.base.org https://base.publicnode.com https://*.base.org https://nvdpnxnpjfifosdmcgdw.supabase.co https://*.supabase.co https://*.imagedelivery.net;",
   },
 };
 

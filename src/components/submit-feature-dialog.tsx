@@ -38,6 +38,13 @@ export function SubmitFeatureDialog({ projectId, onSubmitted }: SubmitFeatureDia
 
     if (!isValid) return;
 
+    // Check if user has a valid FID
+    if (!user.fid || user.fid === 0) {
+      toast.error("Unable to submit feature: Invalid user ID. Please try logging in again.");
+      console.error("Submit feature error: Invalid user.fid", { fid: user.fid, user });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -56,6 +63,7 @@ export function SubmitFeatureDialog({ projectId, onSubmitted }: SubmitFeatureDia
 
       if (!res.ok) {
         toast.error(data.error || "Failed to submit feature");
+        console.error("Submit feature error:", data);
         return;
       }
 
