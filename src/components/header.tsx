@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { LogIn, Settings, Wallet } from "lucide-react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 
-function ThemeToggle() {
+const ThemeToggle = memo(function ThemeToggle() {
   const [isDark, setIsDark] = useState(true);
 
   useEffect(() => {
@@ -55,9 +55,9 @@ function ThemeToggle() {
       )}
     </Button>
   );
-}
+});
 
-function WalletConnectButton() {
+const WalletConnectButton = memo(function WalletConnectButton() {
   const { address, isConnected } = useAccount();
   const { connect, connectors, isPending } = useConnect();
   const { disconnect } = useDisconnect();
@@ -87,9 +87,9 @@ function WalletConnectButton() {
       {isPending ? "Connecting..." : "Connect Wallet"}
     </Button>
   );
-}
+});
 
-export function Header() {
+export const Header = memo(function Header() {
   const { user, isLoading, signIn, walletAddress } = useAuth();
   const [isSigningIn, setIsSigningIn] = useState(false);
 
@@ -168,4 +168,4 @@ export function Header() {
       </div>
     </header>
   );
-}
+});
