@@ -3,164 +3,10 @@
  * Handles interactions with RoadmaprVoting.sol
  */
 
-import { createWalletClient, createPublicClient, http, type Address, type Hash } from "viem";
+import { createWalletClient, http, type Address, type Hash } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-
-// Contract ABI (functions we use)
-const ROADMAPR_VOTING_ABI = [
-  // Migration
-  {
-    "inputs": [{"name": "_migrationContract", "type": "address"}],
-    "name": "setMigrationContract",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {"name": "featureId", "type": "bytes32"},
-      {"name": "voters", "type": "address[]"}
-    ],
-    "name": "migrateFeature",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  // Platform fee
-  {
-    "inputs": [{"name": "_platformFeeRecipient", "type": "address"}],
-    "name": "setPlatformFeeRecipient",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  // Project management
-  {
-    "inputs": [
-      {"name": "projectId", "type": "bytes32"},
-      {"name": "tokenAddress", "type": "address"},
-      {"name": "voteIncrement", "type": "uint256"}
-    ],
-    "name": "registerProject",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {"name": "projectId", "type": "bytes32"},
-      {"name": "voteIncrement", "type": "uint256"}
-    ],
-    "name": "updateProject",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  // Voting
-  {
-    "inputs": [
-      {"name": "featureId", "type": "bytes32"},
-      {"name": "projectId", "type": "bytes32"},
-      {"name": "voteCount", "type": "uint256"},
-      {"name": "isUpvote", "type": "bool"}
-    ],
-    "name": "vote",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [{"name": "featureId", "type": "bytes32"}],
-    "name": "withdrawVote",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  // Feature shipping
-  {
-    "inputs": [{"name": "featureId", "type": "bytes32"}],
-    "name": "markFeatureShipped",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  // Token claiming
-  {
-    "inputs": [
-      {"name": "featureId", "type": "bytes32"},
-      {"name": "voters", "type": "address[]"}
-    ],
-    "name": "claimTokens",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {"name": "featureIds", "type": "bytes32[]"},
-      {"name": "votersPerFeature", "type": "address[][]"}
-    ],
-    "name": "batchClaimTokens",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  // Platform fee withdrawal
-  {
-    "inputs": [{"name": "projectId", "type": "bytes32"}],
-    "name": "withdrawPlatformFees",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  // View functions
-  {
-    "inputs": [{"name": "featureId", "type": "bytes32"}],
-    "name": "getFeature",
-    "outputs": [{"components": [
-      {"name": "projectId", "type": "bytes32"},
-      {"name": "totalUpvoteTokens", "type": "uint256"},
-      {"name": "totalDownvoteTokens", "type": "uint256"},
-      {"name": "shippedAt", "type": "uint256"},
-      {"name": "status", "type": "uint8"}
-    ], "name": "", "type": "tuple"}],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {"name": "featureId", "type": "bytes32"},
-      {"name": "voters", "type": "address[]"}
-    ],
-    "name": "getClaimableAmount",
-    "outputs": [{"name": "", "type": "uint256"}],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {"name": "featureId", "type": "bytes32"},
-      {"name": "voter", "type": "address"}
-    ],
-    "name": "canWithdraw",
-    "outputs": [{"name": "", "type": "bool"}],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [{"name": "projectId", "type": "bytes32"}],
-    "name": "getPlatformFees",
-    "outputs": [{"name": "", "type": "uint256"}],
-    "stateMutability": "view",
-    "type": "function"
-  }
-] as const;
-
-// Convert UUID to bytes32 (pad with zeros)
-export function uuidToBytes32(uuid: string): `0x${string}` {
-  const clean = uuid.replace(/-/g, '');
-  return `0x${clean.padEnd(64, '0')}` as `0x${string}`;
-}
+import { uuidToBytes32, createPublicClientFn, baseChain } from "./contract-utils";
+import { ROADMAPR_VOTING_ABI } from "./contract-constants";
 
 // Get contract address from env
 export function getContractAddress(): Address {
@@ -169,11 +15,6 @@ export function getContractAddress(): Address {
     throw new Error("NEXT_PUBLIC_ROADMAPR_CONTRACT_ADDRESS not set");
   }
   return address as Address;
-}
-
-// Get RPC URL from env
-export function getRpcUrl(): string {
-  return process.env.NEXT_PUBLIC_RPC_URL || "https://mainnet.base.org";
 }
 
 // Create wallet client from private key
@@ -187,31 +28,7 @@ export function createWalletClientFromPrivateKey() {
 
   return createWalletClient({
     account,
-    chain: {
-      id: 8453, // Base mainnet
-      name: "Base",
-      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      rpcUrls: {
-        default: { http: [getRpcUrl()] },
-        public: { http: [getRpcUrl()] },
-      },
-    },
-    transport: http(),
-  });
-}
-
-// Create public client
-export function createPublicClientFn() {
-  return createPublicClient({
-    chain: {
-      id: 8453, // Base mainnet
-      name: "Base",
-      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      rpcUrls: {
-        default: { http: [getRpcUrl()] },
-        public: { http: [getRpcUrl()] },
-      },
-    },
+    chain: baseChain,
     transport: http(),
   });
 }

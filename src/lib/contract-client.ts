@@ -7,191 +7,13 @@
  * 2. RoadmaprVoting - Complex token-based voting for features within projects
  */
 
-import { createWalletClient, createPublicClient, http, custom, encodeFunctionData, type Address, type Hash } from "viem";
-import { defineChain } from "viem";
+import { createWalletClient, custom, encodeFunctionData, type Address, type Hash } from "viem";
+import { baseChain, uuidToBytes32, getRpcUrl, createPublicClientFn } from "./contract-utils";
+import { PROJECT_RANKING_ABI, PROJECT_RANKING_TOKEN_ABI, ROADMAPR_VOTING_ABI, ERC20_ABI } from "./contract-constants";
 
-// ============================================
-// CONTRACT 1: ProjectRanking (Simple)
-// ============================================
-
-const PROJECT_RANKING_ABI = [
-  // Vote on project (upvote/downvote)
-  {
-    "inputs": [
-      {"name": "projectId", "type": "bytes32"},
-      {"name": "isUpvote", "type": "bool"}
-    ],
-    "name": "voteProject",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  // Get project score
-  {
-    "inputs": [{"name": "projectId", "type": "bytes32"}],
-    "name": "getProjectScore",
-    "outputs": [{"name": "", "type": "bigint"}],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  // Get full project votes
-  {
-    "inputs": [{"name": "projectId", "type": "bytes32"}],
-    "name": "getProjectVotes",
-    "outputs": [
-      {"name": "totalUpvotes", "type": "ubigint"},
-      {"name": "totalDownvotes", "type": "ubigint"},
-      {"name": "score", "type": "bigint"},
-      {"name": "exists", "type": "bool"}
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  // Check if project exists
-  {
-    "inputs": [{"name": "projectId", "type": "bytes32"}],
-    "name": "projectExists",
-    "outputs": [{"name": "", "type": "bool"}],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  // Check if address voted
-  {
-    "inputs": [
-      {"name": "projectId", "type": "bytes32"},
-      {"name": "voter", "type": "address"}
-    ],
-    "name": "hasVotedOnProject",
-    "outputs": [{"name": "", "type": "bool"}],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  // Platform fee management
-  {
-    "inputs": [{"name": "_platformFeeRecipient", "type": "address"}],
-    "name": "setPlatformFeeRecipient",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "platformFeeRecipient",
-    "outputs": [{"name": "", "type": "address"}],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "owner",
-    "outputs": [{"name": "", "type": "address"}],
-    "stateMutability": "view",
-    "type": "function"
-  }
-] as const;
-
-// ============================================
-// CONTRACT 2: RoadmaprVoting (Feature Voting)
-// ============================================
-
-const ROADMAPR_VOTING_ABI = [
-  // Project registration (for feature voting)
-  {
-    "inputs": [
-      {"name": "projectId", "type": "bytes32"},
-      {"name": "tokenAddress", "type": "address"},
-      {"name": "voteIncrement", "type": "ubigint"}
-    ],
-    "name": "registerProject",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  // Vote on feature (NOT project!)
-  {
-    "inputs": [
-      {"name": "featureId", "type": "bytes32"},
-      {"name": "projectId", "type": "bytes32"},
-      {"name": "voteCount", "type": "ubigint"},
-      {"name": "isUpvote", "type": "bool"}
-    ],
-    "name": "vote",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  // Get project data (for feature voting contract)
-  {
-    "inputs": [{"name": "projectId", "type": "bytes32"}],
-    "name": "getProject",
-    "outputs": [
-      {"name": "tokenAddress", "type": "address"},
-      {"name": "owner", "type": "address"},
-      {"name": "voteIncrement", "type": "ubigint"},
-      {"name": "totalFeesCollected", "type": "ubigint"},
-      {"name": "exists", "type": "bool"}
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  // Platform fee management
-  {
-    "inputs": [{"name": "_platformFeeRecipient", "type": "address"}],
-    "name": "setPlatformFeeRecipient",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [{"name": "projectId", "type": "bytes32"}],
-    "name": "withdrawPlatformFees",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [{"name": "projectId", "type": "bytes32"}],
-    "name": "getPlatformFees",
-    "outputs": [{"name": "", "type": "ubigint"}],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "platformFeeRecipient",
-    "outputs": [{"name": "", "type": "address"}],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "owner",
-    "outputs": [{"name": "", "type": "address"}],
-    "stateMutability": "view",
-    "type": "function"
-  }
-] as const;
-
-// ============================================
-// Shared: Chain & Utility Functions
-// ============================================
-
-const baseChain = defineChain({
-  id: 8453,
-  name: "Base",
-  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcUrls: {
-    default: { http: ["https://mainnet.base.org"] },
-  },
-  blockExplorers: {
-    default: { name: "BaseScan", url: "https://base.blockscout.com" },
-  },
-});
-
-export function uuidToBytes32(uuid: string): `0x${string}` {
-  const clean = uuid.replace(/-/g, "");
-  return `0x${clean.padEnd(64, "0")}` as `0x${string}`;
-}
+// Re-export utilities and ABIs for convenience
+export { getRpcUrl, createPublicClientFn, baseChain, uuidToBytes32 };
+export { PROJECT_RANKING_ABI, PROJECT_RANKING_TOKEN_ABI, ROADMAPR_VOTING_ABI, ERC20_ABI };
 
 export function getProjectRankingAddress(): Address {
   const address = process.env.NEXT_PUBLIC_PROJECT_RANKING_ADDRESS;
@@ -207,17 +29,6 @@ export function getRoadmaprVotingAddress(): Address {
     throw new Error("NEXT_PUBLIC_ROADMAPR_VOTING_ADDRESS not set");
   }
   return address as Address;
-}
-
-export function getRpcUrl(): string {
-  return process.env.NEXT_PUBLIC_RPC_URL || "https://mainnet.base.org";
-}
-
-export function createPublicClientFn() {
-  return createPublicClient({
-    chain: baseChain,
-    transport: http(),
-  });
 }
 
 export function createWalletClientFromProvider(provider: any) {
@@ -245,72 +56,6 @@ export function createWalletClientFromProvider(provider: any) {
 // ============================================
 // PROJECT RANKING (Token-Based) Functions
 // ============================================
-
-const PROJECT_RANKING_TOKEN_ABI = [
-  // Vote on project with tokens
-  {
-    "inputs": [
-      {"name": "projectId", "type": "bytes32"},
-      {"name": "voteCount", "type": "uint256"},
-      {"name": "isUpvote", "type": "bool"}
-    ],
-    "name": "voteProject",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  // Get project score
-  {
-    "inputs": [{"name": "projectId", "type": "bytes32"}],
-    "name": "getProjectScore",
-    "outputs": [{"name": "", "type": "uint256"}],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  // Get full project votes
-  {
-    "inputs": [{"name": "projectId", "type": "bytes32"}],
-    "name": "getProjectVotes",
-    "outputs": [
-      {"name": "totalUpvotes", "type": "uint256"},
-      {"name": "totalDownvotes", "type": "uint256"},
-      {"name": "totalTokensSpent", "type": "uint256"},
-      {"name": "score", "type": "uint256"},
-      {"name": "exists", "type": "bool"}
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  // Platform fee management
-  {
-    "inputs": [{"name": "_platformFeeRecipient", "type": "address"}],
-    "name": "setPlatformFeeRecipient",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "platformFeeRecipient",
-    "outputs": [{"name": "", "type": "address"}],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "owner",
-    "outputs": [{"name": "", "type": "address"}],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [{"name": "projectId", "type": "bytes32"}],
-    "name": "projectExists",
-    "outputs": [{"name": "", "type": "bool"}],
-    "stateMutability": "view",
-    "type": "function"
-  }
-] as const;
 
 export function getProjectRankingTokenAddress(): Address {
   const address = process.env.NEXT_PUBLIC_PROJECT_RANKING_TOKEN_ADDRESS;
@@ -350,7 +95,7 @@ export async function voteOnProjectWithTokens(
     // Check allowance using public client (read operation)
     const currentAllowance = await publicClient.readContract({
       address: ROAD_TOKEN_ADDRESS,
-      abi: [{"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}],
+      abi: ERC20_ABI,
       functionName: "allowance",
       args: [account, contractAddress],
     }) as bigint;
@@ -361,15 +106,10 @@ export async function voteOnProjectWithTokens(
     // Check user's token balance
     const tokenBalance = await publicClient.readContract({
       address: ROAD_TOKEN_ADDRESS,
-      abi: [{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}],
+      abi: ERC20_ABI,
       functionName: "balanceOf",
       args: [account],
     }) as bigint;
-
-      tokenBalance: tokenBalance.toString(),
-      requiredTokens: (BigInt(voteCount) * votePrice).toString(),
-      hasEnough: tokenBalance >= BigInt(voteCount) * votePrice
-    });
 
     if (tokenBalance < BigInt(voteCount) * votePrice) {
       throw new Error(`Insufficient $ROAD token balance. You need ${(Number(voteCount) * 1_000_000).toLocaleString()} $ROAD tokens but only have ${(Number(tokenBalance) / 1e18).toLocaleString()} tokens.`);
@@ -381,7 +121,7 @@ export async function voteOnProjectWithTokens(
 
       // Encode approve function call
       const approveData = encodeFunctionData({
-        abi: [{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"}],
+        abi: ERC20_ABI,
         functionName: "approve",
         args: [contractAddress, requiredAllowance],
       });
