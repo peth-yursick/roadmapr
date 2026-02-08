@@ -5,6 +5,7 @@ import { AuthProvider } from "@/lib/auth-context";
 import { VotingProvider } from "@/lib/voting-context";
 import { Providers } from "@/components/providers";
 import { VoteConfirmationBar } from "@/components/vote-confirmation-bar";
+import { ErrorBoundary } from "@/components/error-boundary";
 import "./globals.css";
 
 const inter = Inter({
@@ -75,15 +76,17 @@ export default function RootLayout({
       <body
         className={`${inter.variable} antialiased bg-background text-foreground`}
       >
-        <Providers>
-          <VotingProvider>
-            <AuthProvider>
-              {children}
-              <VoteConfirmationBar />
-              <Toaster />
-            </AuthProvider>
-          </VotingProvider>
-        </Providers>
+        <ErrorBoundary>
+          <Providers>
+            <VotingProvider>
+              <AuthProvider>
+                {children}
+                <VoteConfirmationBar />
+                <Toaster />
+              </AuthProvider>
+            </VotingProvider>
+          </Providers>
+        </ErrorBoundary>
       </body>
     </html>
   );
