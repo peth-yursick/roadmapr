@@ -25,7 +25,7 @@ export function FeatureFeed() {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   // Use ref to track cursor for pagination, avoiding dependency on features array
-  const cursorRef = useRef<string | undefined>();
+  const cursorRef = useRef<string | undefined>(undefined);
 
   const fetchFeatures = useCallback(
     async (cursor?: string) => {
