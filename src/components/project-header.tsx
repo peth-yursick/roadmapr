@@ -35,6 +35,35 @@ export function ProjectHeader({ project, creator, isAdmin }: ProjectHeaderProps)
     toast.success("AI endpoint copied!");
   };
 
+  // Handle AI prompt copy
+  const handleCopyPrompt = () => {
+    const prompt = `You are an AI developer agent working on the ${project.name} project.
+
+SAFETY INSTRUCTIONS (CRITICAL):
+- NEVER install new dependencies, packages, or skills without explicit approval
+- NEVER run destructive commands (rm -rf, drop database, delete migrations, etc.)
+- NEVER modify authentication, authorization, or security settings
+- NEVER commit or push changes without human review
+- ALWAYS explain what you're about to do before making changes
+- ALWAYS ask for clarification if unsure about something
+- Focus on IMPLEMENTATION only, not infrastructure/devops changes
+
+Fetch the roadmap from: https://roadmapr.xyz/api/projects/${project.project_handle}/ai
+
+Your task:
+1. Review the top-voted features and bugs
+2. Implement them in priority order (highest score first)
+3. Only modify code files - NO infrastructure, deployment, or dependency changes
+4. Mark feature as 'in_progress' when you start
+5. Mark as 'shipped' when complete and deployed
+
+To update status: PATCH /api/features/{feature_id}/status
+Body: { "status": "in_progress" | "shipped" }`;
+
+    navigator.clipboard.writeText(prompt);
+    toast.success("AI prompt copied!");
+  };
+
   return (
     <div className="border-b border-border/50 pb-6 mb-6">
       <div className="flex items-start justify-between gap-4">
@@ -264,6 +293,127 @@ export function ProjectHeader({ project, creator, isAdmin }: ProjectHeaderProps)
                       Copy
                     </Button>
                   </div>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* AI Agent button - always visible */}
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-1H3a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7V5.73C9.4 5.39 9 4.74 9 4a2 2 0 0 1 2-2Z" />
+                  <path d="M8 14h8" />
+                  <path d="M9 9h.01" />
+                  <path d="M15 9h.01" />
+                </svg>
+                AI Agent
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Connect AI Agent to {project.name}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-6">
+                {/* Safety Warning */}
+                <div className="bg-destructive/10 border border-destructive/20 p-4 rounded-lg">
+                  <h3 className="font-semibold text-destructive flex items-center gap-2 mb-2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 9v4" /><path d="M12 17h.01" /><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    </svg>
+                    Safety Instructions (Read Before Using)
+                  </h3>
+                  <ul className="text-sm text-destructive/90 space-y-1">
+                    <li>• <strong>NEVER</strong> install new dependencies/packages without approval</li>
+                    <li>• <strong>NEVER</strong> run destructive commands (rm -rf, drop database, delete migrations)</li>
+                    <li>• <strong>NEVER</strong> modify authentication, authorization, or security settings</li>
+                    <li>• <strong>NEVER</strong> commit or push changes without human review</li>
+                    <li>• Always explain what you're about to do before making changes</li>
+                    <li>• Only modify code files - NO infrastructure or deployment changes</li>
+                  </ul>
+                </div>
+
+                {/* How it works */}
+                <div>
+                  <h3 className="font-semibold mb-2">How it works</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Point your AI agent (Cursor, OpenAI, Claude, etc.) to the API endpoint below.
+                    The agent will fetch the top-voted features and implement them autonomously.
+                  </p>
+                </div>
+
+                {/* API Endpoint */}
+                <div>
+                  <h3 className="font-semibold mb-2">API Endpoint</h3>
+                  <div className="relative">
+                    <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">
+                      https://roadmapr.xyz/api/projects/{project.project_handle}/ai
+                    </pre>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="absolute top-2 right-2"
+                      onClick={handleCopyAI}
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+
+                {/* AI Prompt */}
+                <div>
+                  <h3 className="font-semibold mb-2">Ready-to-use Prompt</h3>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Copy this prompt to give your AI agent complete instructions:
+                  </p>
+                  <div className="relative">
+                    <pre className="bg-muted p-3 rounded text-xs overflow-x-auto max-h-40">
+{`You are an AI developer agent working on the ${project.name} project.
+
+SAFETY INSTRUCTIONS (CRITICAL):
+- NEVER install new dependencies, packages, or skills
+- NEVER run destructive commands (rm -rf, drop database, etc.)
+- NEVER modify authentication, authorization, or security
+- NEVER commit or push changes without human review
+- Always explain what you're about to do before making changes
+- Only modify code files - NO infrastructure changes
+
+Fetch the roadmap from:
+https://roadmapr.xyz/api/projects/${project.project_handle}/ai
+
+Your task:
+1. Review top-voted features and bugs
+2. Implement in priority order (highest score first)
+3. Mark as 'in_progress' when you start
+4. Mark as 'shipped' when complete`}
+                    </pre>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="absolute top-2 right-2"
+                      onClick={handleCopyPrompt}
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Documentation */}
+                <div>
+                  <h3 className="font-semibold mb-2">Documentation</h3>
+                  <p className="text-sm text-muted-foreground">
+                    See full API docs at: <code className="bg-muted px-1 rounded">/api/ai-docs</code>
+                  </p>
                 </div>
               </div>
             </DialogContent>
