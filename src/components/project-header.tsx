@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import type { Project, NeynarUser } from "@/lib/types";
 
@@ -18,6 +19,20 @@ export function ProjectHeader({ project, creator, isAdmin }: ProjectHeaderProps)
     const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
     navigator.clipboard.writeText(shareUrl);
     toast.success("Link copied! Share to open in Farcaster miniapp.");
+  };
+
+  // Handle embed code copy
+  const handleCopyEmbed = () => {
+    const embedCode = `<iframe src="https://roadmapr.xyz/embed/${project.id}" width="100%" height="600" frameborder="0"></iframe>`;
+    navigator.clipboard.writeText(embedCode);
+    toast.success("Embed code copied!");
+  };
+
+  // Handle AI endpoint copy
+  const handleCopyAI = () => {
+    const aiEndpoint = `https://roadmapr.xyz/api/projects/${project.project_handle}/ai`;
+    navigator.clipboard.writeText(aiEndpoint);
+    toast.success("AI endpoint copied!");
   };
 
   return (
@@ -155,6 +170,104 @@ export function ProjectHeader({ project, creator, isAdmin }: ProjectHeaderProps)
             </svg>
             Share
           </Button>
+
+          {/* Embed button - always visible */}
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M15 3h6v6" />
+                  <path d="M10 14L21 3" />
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                </svg>
+                Embed
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Embed {project.name} in your app</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                {/* Web Embed */}
+                <div>
+                  <h3 className="text-sm font-semibold mb-2">Web Embed (iframe)</h3>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Add this iframe to your website to display the live feature feed:
+                  </p>
+                  <div className="relative">
+                    <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">
+                      &lt;iframe src="https://roadmapr.xyz/embed/{project.id}" width="100%" height="600" frameborder="0"&gt;&lt;/iframe&gt;
+                    </pre>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="absolute top-2 right-2"
+                      onClick={handleCopyEmbed}
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+
+                {/* AI Agent Integration */}
+                <div>
+                  <h3 className="text-sm font-semibold mb-2">AI Agent Integration</h3>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Point your AI agent (like Cursor, OpenAI, etc.) to this API endpoint to autonomously implement top-voted features:
+                  </p>
+                  <div className="relative">
+                    <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">
+                      https://roadmapr.xyz/api/projects/{project.project_handle}/ai
+                    </pre>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="absolute top-2 right-2"
+                      onClick={handleCopyAI}
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    The AI endpoint returns prioritized features with implementation instructions.
+                  </p>
+                </div>
+
+                {/* Farcaster Miniapp */}
+                <div>
+                  <h3 className="text-sm font-semibold mb-2">Farcaster Miniapp</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Share this link to open as a Farcaster miniapp:
+                  </p>
+                  <div className="relative">
+                    <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">
+                      https://roadmapr.xyz/projects/{project.project_handle}
+                    </pre>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="absolute top-2 right-2"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`https://roadmapr.xyz/projects/${project.project_handle}`);
+                        toast.success("Miniapp link copied!");
+                      }}
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {/* Admin settings button */}
           {isAdmin && (
