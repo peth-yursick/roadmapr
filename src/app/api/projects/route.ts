@@ -28,10 +28,8 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("projects")
       .select("*")
-      // Sort by votes (highest first), treating NULL as 0
       .order("total_votes", { ascending: false, nullsFirst: false })
-      // Then by oldest first as tiebreaker - so new 0-vote projects don't jump to the top
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(limit);
 
     if (search) {
@@ -42,7 +40,16 @@ export async function GET(request: NextRequest) {
       query = query.lt("created_at", cursor);
     }
 
-    const { data: projects, error } = await query;
+    const { data: rawProjects, error } = await query;
+
+    // Sort in JS to guarantee NULL/0 votes don't end up above voted projects
+    const projects = (rawProjects || []).sort((a, b) => {
+      const aVotes = a.total_votes ?? 0;
+      const bVotes = b.total_votes ?? 0;
+      if (bVotes !== aVotes) return bVotes - aVotes; // highest votes first
+      // Tiebreaker: newest first
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
 
     if (error) {
       console.error("[API /projects] Database error:", error);
