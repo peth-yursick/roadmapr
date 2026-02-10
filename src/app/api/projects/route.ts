@@ -28,6 +28,9 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("projects")
       .select("*")
+      // Sort by votes (highest first), treating NULL as 0
+      .order("total_votes", { ascending: false, nullsFirst: false })
+      // Then by creation date (newest first) as tiebreaker
       .order("created_at", { ascending: false })
       .limit(limit);
 

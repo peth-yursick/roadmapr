@@ -99,7 +99,7 @@ Body: { "status": "in_progress" | "shipped" }`;
                 </Badge>
               )}
               <Badge variant="outline">
-                {project.voting_type === "score" ? "Score Voting" : "Token Voting"}
+                {(project.voting_type === "token" || project.token_address) ? "Token Voting" : "Score Voting"}
               </Badge>
             </div>
 
@@ -221,7 +221,7 @@ Body: { "status": "in_progress" | "shipped" }`;
                 Embed
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg">
+            <DialogContent className="max-w-lg overflow-x-hidden">
               <DialogHeader>
                 <DialogTitle>Embed {project.name} in your app</DialogTitle>
               </DialogHeader>
@@ -233,7 +233,7 @@ Body: { "status": "in_progress" | "shipped" }`;
                     Add this iframe to your website to display the live feature feed:
                   </p>
                   <div className="relative">
-                    <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">
+                    <pre className="bg-muted p-3 rounded text-xs whitespace-pre-wrap break-all">
                       &lt;iframe src="https://roadmapr.xyz/embed/{project.id}" width="100%" height="600" frameborder="0"&gt;&lt;/iframe&gt;
                     </pre>
                     <Button
@@ -254,7 +254,7 @@ Body: { "status": "in_progress" | "shipped" }`;
                     Point your AI agent (like Cursor, OpenAI, etc.) to this API endpoint to autonomously implement top-voted features:
                   </p>
                   <div className="relative">
-                    <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">
+                    <pre className="bg-muted p-3 rounded text-xs whitespace-pre-wrap break-all">
                       https://roadmapr.xyz/api/projects/{project.project_handle}/ai
                     </pre>
                     <Button
@@ -278,7 +278,7 @@ Body: { "status": "in_progress" | "shipped" }`;
                     Share this link to open as a Farcaster miniapp:
                   </p>
                   <div className="relative">
-                    <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">
+                    <pre className="bg-muted p-3 rounded text-xs whitespace-pre-wrap break-all">
                       https://roadmapr.xyz/projects/{project.project_handle}
                     </pre>
                     <Button
@@ -320,7 +320,7 @@ Body: { "status": "in_progress" | "shipped" }`;
                 AI Agent
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto overflow-x-hidden">
               <DialogHeader>
                 <DialogTitle>Connect AI Agent to {project.name}</DialogTitle>
               </DialogHeader>
@@ -356,7 +356,7 @@ Body: { "status": "in_progress" | "shipped" }`;
                 <div>
                   <h3 className="font-semibold mb-2">API Endpoint</h3>
                   <div className="relative">
-                    <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">
+                    <pre className="bg-muted p-3 rounded text-xs whitespace-pre-wrap break-all">
                       https://roadmapr.xyz/api/projects/{project.project_handle}/ai
                     </pre>
                     <Button
@@ -377,7 +377,7 @@ Body: { "status": "in_progress" | "shipped" }`;
                     Copy this prompt to give your AI agent complete instructions:
                   </p>
                   <div className="relative">
-                    <pre className="bg-muted p-3 rounded text-xs overflow-x-auto max-h-40">
+                    <pre className="bg-muted p-3 rounded text-xs whitespace-pre-wrap break-all max-h-40 overflow-y-auto">
 {`You are an AI developer agent working on the ${project.name} project.
 
 SAFETY INSTRUCTIONS (CRITICAL):
