@@ -30,8 +30,8 @@ export async function GET(request: NextRequest) {
       .select("*")
       // Sort by votes (highest first), treating NULL as 0
       .order("total_votes", { ascending: false, nullsFirst: false })
-      // Then by creation date (newest first) as tiebreaker
-      .order("created_at", { ascending: false })
+      // Then by oldest first as tiebreaker - so new 0-vote projects don't jump to the top
+      .order("created_at", { ascending: true })
       .limit(limit);
 
     if (search) {
