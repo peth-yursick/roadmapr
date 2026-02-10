@@ -32,7 +32,7 @@ export const metadata: Metadata = {
     title: "Roadmapr",
     description: "Community-weighted roadmap for Farcaster Protocol",
     type: "website",
-    images: ["https://roadmapr-ten.vercel.app/hero.png"],
+    images: ["https://roadmapr-ten.vercel.app/hero.jpg"],
   },
   other: {
     "fc:frame": JSON.stringify({
