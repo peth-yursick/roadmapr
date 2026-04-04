@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { isSupabasePaused } from "@/lib/supabase/health";
 import { getNeynarUser } from "@/lib/neynar";
 import { cookies } from "next/headers";
 
@@ -53,6 +54,12 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error("[API /projects] Database error:", error);
+      if (isSupabasePaused(error)) {
+        return NextResponse.json(
+          { error: "database_paused", message: "Database is paused due to inactivity. An admin needs to resume it from the Supabase dashboard." },
+          { status: 503 }
+        );
+      }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
@@ -64,6 +71,12 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     console.error("[API /projects] Unexpected error:", err);
+    if (isSupabasePaused(err)) {
+      return NextResponse.json(
+        { error: "database_paused", message: "Database is paused due to inactivity. An admin needs to resume it from the Supabase dashboard." },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

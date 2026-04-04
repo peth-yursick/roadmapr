@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { reportClientError } from "@/hooks/use-error-reporter";
 
 interface Props {
   children: React.ReactNode;
@@ -29,6 +30,10 @@ export class ErrorBoundary extends React.Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("[ErrorBoundary] Caught error:", error);
     console.error("[ErrorBoundary] Component stack:", errorInfo.componentStack);
+    reportClientError(`[ErrorBoundary] ${error.message}`, {
+      stack: error.stack,
+      componentStack: errorInfo.componentStack,
+    });
   }
 
   render() {

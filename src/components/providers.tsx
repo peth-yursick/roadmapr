@@ -6,6 +6,7 @@ import { WagmiProvider } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { wagmiConfig } from "@/lib/wagmi";
 import { VotingProvider } from "@/lib/voting-context";
+import { installGlobalErrorReporter } from "@/hooks/use-error-reporter";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +23,10 @@ function WalletProviders({ children }: { children: React.ReactNode }) {
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  React.useEffect(() => {
+    installGlobalErrorReporter();
+  }, []);
+
   const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
 
   // Wrap with wallet providers first

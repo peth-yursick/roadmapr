@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { ProjectCard } from "@/components/project-card";
 import { useAuth } from "@/lib/auth-context";
+import { reportClientError } from "@/hooks/use-error-reporter";
 
 interface Project {
   id: string;
@@ -19,6 +20,7 @@ export function ProjectList() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dbPaused, setDbPaused] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -37,8 +39,12 @@ export function ProjectList() {
         const res = await fetch("/api/projects?limit=50");
 
         if (!res.ok) {
-          const errorText = await res.text();
-          console.error("[ProjectList] API error:", res.status, errorText);
+          const data = await res.json().catch(() => null);
+          console.error("[ProjectList] API error:", res.status, data);
+          if (data?.error === "database_paused") {
+            if (mounted) setDbPaused(true);
+            return;
+          }
           throw new Error(`Failed to fetch projects: ${res.status}`);
         }
 
@@ -49,8 +55,10 @@ export function ProjectList() {
         }
       } catch (err) {
         console.error("[ProjectList] Failed to fetch projects:", err);
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        reportClientError(`[ProjectList] ${msg}`);
         if (mounted) {
-          setError(err instanceof Error ? err.message : "Unknown error");
+          setError(msg);
         }
       } finally {
         if (mounted) {
@@ -82,6 +90,37 @@ export function ProjectList() {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-muted-foreground">Loading projects...</div>
+      </div>
+    );
+  }
+
+  if (dbPaused) {
+    return (
+      <div className="text-center py-12 max-w-md mx-auto">
+        <div className="text-5xl mb-4">💤</div>
+        <h2 className="text-xl font-semibold mb-2">Database is sleeping</h2>
+        <p className="text-muted-foreground mb-4">
+          The database has been paused due to inactivity. This usually takes a
+          minute or two to wake up after being resumed.
+        </p>
+        <p className="text-sm text-muted-foreground mb-6">
+          If you&apos;re the project admin, resume it from the{" "}
+          <a
+            href="https://supabase.com/dashboard"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline hover:text-primary/80"
+          >
+            Supabase Dashboard
+          </a>
+          , then reload this page.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition text-sm"
+        >
+          Reload Page
+        </button>
       </div>
     );
   }
